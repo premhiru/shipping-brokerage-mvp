@@ -29,7 +29,7 @@ SUPABASE_SECRET_KEY=
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
-The app currently runs in demo-data mode without Supabase keys. File upload controls call a server-side Next.js API route and require `SUPABASE_URL` plus `SUPABASE_SECRET_KEY` to write to Supabase Storage.
+The app uses server-side Supabase credentials for shipment creation, shipment reads, and private document storage. File upload controls call a server-side Next.js API route and require `SUPABASE_URL` plus `SUPABASE_SECRET_KEY` to write to Supabase Storage.
 
 ## Supabase Setup
 
@@ -103,16 +103,16 @@ Carrier demo links:
 4. Deploy.
 5. Confirm these smoke tests:
    - Dashboard loads.
+   - Creating a shipment writes to Supabase and appears on the dashboard and shipment board.
    - Shipment detail tabs render.
    - Guest share link only shows one shipment.
-   - Feedback page renders and accepts reviewer input visually.
+   - Feedback page renders.
 
 ## MVP Limitations
 
-- UI uses typed demo data until Supabase data access is connected.
-- Buttons and forms are staged for integration but do not persist records yet.
+- Shipment creation, shipment reads, and document uploads are backed by Supabase through app server routes.
+- Admin approve/reject, feedback submission, comments, timeline updates, share-link generation, carrier share updates, and auth are staged UI flows for the next backend pass.
 - Carrier tracking is manual.
-- Storage upload controls are present, but signed URL upload/download wiring is a next step.
 - Email notifications are deferred; in-app notification UI is included.
 
 ## Roadmap
