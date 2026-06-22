@@ -110,8 +110,8 @@ Carrier demo links:
 
 ## MVP Limitations
 
-- Shipment creation, shipment reads, and document uploads are backed by Supabase through app server routes.
-- Admin approve/reject, feedback submission, comments, timeline updates, share-link generation, carrier share updates, and auth are staged UI flows for the next backend pass.
+- Shipment creation, shipment reads, document uploads, feedback, comments, timeline updates, share-link generation, carrier share updates, and admin document review are backed by Supabase through app server routes.
+- Auth is still a staged demo flow for the next backend pass.
 - Carrier tracking is manual.
 - Email notifications are deferred; in-app notification UI is included.
 

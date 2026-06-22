@@ -332,3 +332,45 @@ export async function getSupabaseShipment(id: string) {
 
   return data ? mapSupabaseShipment(data as SupabaseShipmentRow) : null;
 }
+
+export async function getSupabaseShipmentByShareToken(token: string) {
+  const supabase = createSupabaseServerClient();
+
+  if (!supabase) {
+    return null;
+  }
+
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+
+  const { data: shareLink, error: shareError } = await supabase
+    .from("share_links")
+    .select("shipment_id")
+    .eq("company_id", DEMO_COMPANY_ID)
+    .eq("token_hash", tokenHash)
+    .is("revoked_at", null)
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+
+  if (shareError) {
+    throw new Error(shareError.message);
+  }
+
+  const shipmentId = shareLink?.shipment_id as string | undefined;
+
+  if (!shipmentId) {
+    return null;
+  }
+
+  const shipment = await getSupabaseShipment(shipmentId);
+
+  if (!shipment) {
+    return null;
+  }
+
+  return {
+    ...shipment,
+    shareLinks: shipment.shareLinks.map((shareLink) =>
+      shareLink.token === tokenHash ? { ...shareLink, token } : shareLink,
+    ),
+  };
+}
