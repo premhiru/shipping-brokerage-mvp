@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { resolveAvailableShipmentReference, nextShipmentReference } from "@/lib/shipment-reference";
 import { getSupabaseShipments } from "@/lib/supabase-shipments";
 import { createSupabaseServerClient, jsonError } from "@/lib/supabase-server";
 import { DEMO_COMPANY_ID } from "@/lib/storage";
@@ -74,7 +75,6 @@ async function resolveUniqueReference(baseReference: string) {
     throw new Error("Supabase server env vars are missing.");
   }
 
-  const normalized = baseReference || "HB-2026-0005";
   const { data, error } = await supabase
     .from("shipments")
     .select("shipment_reference")
@@ -85,20 +85,10 @@ async function resolveUniqueReference(baseReference: string) {
     throw new Error(error.message);
   }
 
-  const existing = new Set((data ?? []).map((row) => row.shipment_reference as string));
-
-  if (!existing.has(normalized)) {
-    return normalized;
-  }
-
-  const nextNumber = Math.max(
-    5,
-    ...Array.from(existing)
-      .map((reference) => Number(reference.match(/^HB-2026-(\d+)$/)?.[1] ?? 0))
-      .filter((value) => Number.isFinite(value)),
-  ) + 1;
-
-  return `HB-2026-${String(nextNumber).padStart(4, "0")}`;
+  return resolveAvailableShipmentReference(
+    baseReference,
+    (data ?? []).map((row) => row.shipment_reference as string),
+  );
 }
 
 function parsePayload(raw: unknown): CreateShipmentPayload {
@@ -167,7 +157,10 @@ export async function GET() {
     }
 
     return Response.json(
-      { shipments },
+      {
+        shipments,
+        nextReference: nextShipmentReference(shipments.map((shipment) => shipment.reference)),
+      },
       {
         headers: {
           "Cache-Control": "no-store",

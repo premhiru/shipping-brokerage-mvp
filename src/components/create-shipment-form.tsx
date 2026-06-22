@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
@@ -8,8 +8,10 @@ import { StorageUploadField } from "@/components/storage-upload-field";
 import { Card, SelectField, TextArea, TextInput } from "@/components/ui";
 import { documentTypes } from "@/lib/demo-data";
 import { documentLabelToValue } from "@/lib/document-types";
+import { DEFAULT_SHIPMENT_REFERENCE, nextShipmentReference } from "@/lib/shipment-reference";
 
 type SaveState = "idle" | "saving" | "draft" | "created" | "error";
+type ReferenceState = "loading" | "ready" | "fallback";
 
 type UploadedDocumentState = {
   path: string;
@@ -22,6 +24,8 @@ export function CreateShipmentForm() {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [referenceState, setReferenceState] = useState<ReferenceState>("loading");
+  const [shipmentReference, setShipmentReference] = useState(DEFAULT_SHIPMENT_REFERENCE);
   const [createdShipment, setCreatedShipment] = useState<{ id: string; reference: string } | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [documentRows, setDocumentRows] = useState(["document-row-1"]);
@@ -43,6 +47,42 @@ export function CreateShipmentForm() {
 
     return (((l * w * h) / 1_000_000) * p).toFixed(3);
   }, [height, length, packages, width]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadNextReference() {
+      try {
+        const response = await fetch("/api/shipments", { cache: "no-store" });
+        const payload = (await response.json()) as {
+          nextReference?: string;
+          shipments?: { reference: string }[];
+        };
+
+        if (!response.ok) {
+          throw new Error("Unable to load latest shipment reference.");
+        }
+
+        const nextReference =
+          payload.nextReference || nextShipmentReference((payload.shipments ?? []).map((shipment) => shipment.reference));
+
+        if (!cancelled) {
+          setShipmentReference(nextReference);
+          setReferenceState("ready");
+        }
+      } catch {
+        if (!cancelled) {
+          setReferenceState("fallback");
+        }
+      }
+    }
+
+    void loadNextReference();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function submitShipment(intent: "draft" | "created") {
     if (!formRef.current || saveState === "saving") {
@@ -199,7 +239,21 @@ export function CreateShipmentForm() {
       <Card>
         <h2 className="text-lg font-semibold text-slate-950">Shipment Reference</h2>
         <div className="mt-5 grid gap-4 md:grid-cols-3">
-          <TextInput label="Shipment reference" name="shipmentReference" defaultValue="HB-2026-0005" />
+          <div>
+            <TextInput
+              label="Shipment reference"
+              name="shipmentReference"
+              value={shipmentReference}
+              onChange={(event) => setShipmentReference(event.target.value)}
+            />
+            <p className="mt-1 text-xs text-zinc-500">
+              {referenceState === "loading"
+                ? "Checking latest Supabase shipment reference..."
+                : referenceState === "ready"
+                  ? "Auto-filled from the latest Supabase shipment reference."
+                  : "Using fallback reference; duplicate protection still runs on save."}
+            </p>
+          </div>
           <TextInput label="Carrier / shipping line" name="carrier" placeholder="e.g. Maersk" />
           <TextInput label="Booking number" name="bookingNumber" placeholder="Optional" />
         </div>
