@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ShipmentStatusCard } from "@/components/shipment-status-card";
 import { Badge, Card, EmptyState, Field } from "@/components/ui";
 import { documentTypes, milestoneCatalog } from "@/lib/demo-data";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
@@ -33,13 +34,8 @@ export function ShipmentTabs({ shipment }: { shipment: Shipment }) {
 
 export function ShipmentSummary({ shipment }: { shipment: Shipment }) {
   return (
-    <div className="grid gap-4 lg:grid-cols-4">
-      <Card>
-        <p className="text-sm font-medium text-zinc-500">Shipment status</p>
-        <div className="mt-3">
-          <Badge value={shipment.status} />
-        </div>
-      </Card>
+    <div className="grid gap-4 lg:grid-cols-5">
+      <ShipmentStatusCard shipmentId={shipment.id} status={shipment.status} />
       <Card>
         <p className="text-sm font-medium text-zinc-500">Document status</p>
         <div className="mt-3">
