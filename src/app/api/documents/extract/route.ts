@@ -15,6 +15,18 @@ const MAX_EXTRACTION_BYTES = 5 * 1024 * 1024;
 
 type PdfParser = typeof import("pdf-parse")["PDFParse"];
 
+async function installPdfCanvasPolyfills() {
+  const canvas = await import("@napi-rs/canvas");
+  const canvasPolyfills = canvas as Record<string, unknown>;
+  const globalScope = globalThis as Record<string, unknown>;
+
+  globalScope.DOMMatrix ??= canvasPolyfills.DOMMatrix;
+  globalScope.DOMPoint ??= canvasPolyfills.DOMPoint;
+  globalScope.DOMRect ??= canvasPolyfills.DOMRect;
+  globalScope.ImageData ??= canvasPolyfills.ImageData;
+  globalScope.Path2D ??= canvasPolyfills.Path2D;
+}
+
 function configurePdfWorker(PDFParse: PdfParser) {
   const require = createRequire(import.meta.url);
   const workerCandidates = [
@@ -29,6 +41,8 @@ function configurePdfWorker(PDFParse: PdfParser) {
 }
 
 async function extractPdfText(file: File) {
+  await installPdfCanvasPolyfills();
+
   const { PDFParse } = await import("pdf-parse");
 
   configurePdfWorker(PDFParse);

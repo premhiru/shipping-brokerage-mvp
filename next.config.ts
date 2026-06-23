@@ -1,9 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["pdf-parse"],
+  serverExternalPackages: ["pdf-parse", "@napi-rs/canvas"],
   outputFileTracingIncludes: {
-    "/api/documents/extract": ["node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"],
+    "/api/documents/extract": [
+      "node_modules/@napi-rs/canvas*/**/*",
+      "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+    ],
   },
 };
 
