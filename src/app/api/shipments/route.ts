@@ -21,6 +21,11 @@ type UploadedDocumentPayload = {
   };
 };
 
+type AutofillPayload = {
+  appliedFields: string[];
+  sourceFiles: string[];
+};
+
 type CreateShipmentPayload = {
   intent: "draft" | "created";
   shipmentReference: string;
@@ -51,6 +56,7 @@ type CreateShipmentPayload = {
   containerNumber: string;
   notes: string;
   documents: UploadedDocumentPayload[];
+  autofill: AutofillPayload;
 };
 
 function cleanString(value: unknown) {
@@ -66,6 +72,14 @@ function requireField(value: string, label: string) {
   if (!value) {
     throw new Error(`${label} is required.`);
   }
+}
+
+function cleanStringArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map(cleanString).filter(Boolean);
 }
 
 async function resolveUniqueReference(baseReference: string) {
@@ -97,6 +111,9 @@ function parsePayload(raw: unknown): CreateShipmentPayload {
   }
 
   const input = raw as Record<string, unknown>;
+  const rawAutofill = input.autofill && typeof input.autofill === "object"
+    ? (input.autofill as Record<string, unknown>)
+    : {};
   const payload: CreateShipmentPayload = {
     intent: input.intent === "draft" ? "draft" : "created",
     shipmentReference: cleanString(input.shipmentReference),
@@ -129,6 +146,10 @@ function parsePayload(raw: unknown): CreateShipmentPayload {
     documents: Array.isArray(input.documents)
       ? (input.documents as UploadedDocumentPayload[])
       : [],
+    autofill: {
+      appliedFields: cleanStringArray(rawAutofill.appliedFields),
+      sourceFiles: cleanStringArray(rawAutofill.sourceFiles),
+    },
   };
 
   requireField(payload.shipperName, "Shipper name");
@@ -340,6 +361,8 @@ export async function POST(request: Request) {
         reference: shipmentReference,
         source: "create_shipment_form",
         uploadedDocumentCount: uploadedDocuments.length,
+        autofillAppliedFields: payload.autofill.appliedFields,
+        autofillSourceFiles: payload.autofill.sourceFiles,
       },
     });
 

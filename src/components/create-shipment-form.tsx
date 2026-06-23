@@ -3,15 +3,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Sparkles, Trash2 } from "lucide-react";
 import { StorageUploadField } from "@/components/storage-upload-field";
 import { Card, SelectField, TextArea, TextInput } from "@/components/ui";
 import { documentTypes } from "@/lib/demo-data";
 import { documentLabelToValue } from "@/lib/document-types";
 import { DEFAULT_SHIPMENT_REFERENCE, nextShipmentReference } from "@/lib/shipment-reference";
+import type { AutofillField, AutofillSuggestion } from "@/lib/document-autofill";
 
 type SaveState = "idle" | "saving" | "draft" | "created" | "error";
 type ReferenceState = "loading" | "ready" | "fallback";
+type AutofillState = "idle" | "extracting" | "ready" | "unsupported" | "error";
 
 type UploadedDocumentState = {
   path: string;
@@ -30,6 +32,11 @@ export function CreateShipmentForm() {
   const [errorMessage, setErrorMessage] = useState("");
   const [documentRows, setDocumentRows] = useState(["document-row-1"]);
   const [documentUploads, setDocumentUploads] = useState<Record<string, UploadedDocumentState>>({});
+  const [autofillState, setAutofillState] = useState<AutofillState>("idle");
+  const [autofillMessage, setAutofillMessage] = useState("");
+  const [autofillSuggestions, setAutofillSuggestions] = useState<AutofillSuggestion[]>([]);
+  const [selectedAutofillFields, setSelectedAutofillFields] = useState<Partial<Record<AutofillField, boolean>>>({});
+  const [appliedAutofillFields, setAppliedAutofillFields] = useState<AutofillField[]>([]);
   const [length, setLength] = useState("120");
   const [width, setWidth] = useState("100");
   const [height, setHeight] = useState("140");
@@ -84,6 +91,140 @@ export function CreateShipmentForm() {
     };
   }, []);
 
+  function mergeAutofillSuggestions(nextSuggestions: AutofillSuggestion[]) {
+    setAutofillSuggestions((currentSuggestions) => {
+      const merged = new Map<AutofillField, AutofillSuggestion>();
+
+      for (const suggestion of currentSuggestions) {
+        merged.set(suggestion.field, suggestion);
+      }
+
+      for (const suggestion of nextSuggestions) {
+        if (!merged.has(suggestion.field)) {
+          merged.set(suggestion.field, suggestion);
+        }
+      }
+
+      return Array.from(merged.values());
+    });
+
+    setSelectedAutofillFields((currentSelection) => {
+      const nextSelection = { ...currentSelection };
+
+      for (const suggestion of nextSuggestions) {
+        if (nextSelection[suggestion.field] === undefined) {
+          nextSelection[suggestion.field] = true;
+        }
+      }
+
+      return nextSelection;
+    });
+  }
+
+  async function extractAutofillSuggestions(file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+    setAutofillState("extracting");
+    setAutofillMessage(`Scanning ${file.name} for shipment fields...`);
+
+    try {
+      const response = await fetch("/api/documents/extract", {
+        method: "POST",
+        body: formData,
+      });
+      const payload = (await response.json()) as {
+        suggestions?: AutofillSuggestion[];
+        message?: string;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Unable to scan this document.");
+      }
+
+      const suggestions = payload.suggestions ?? [];
+
+      if (suggestions.length > 0) {
+        mergeAutofillSuggestions(suggestions);
+        setAutofillState("ready");
+      } else {
+        setAutofillState(payload.message?.includes("PDF") || payload.message?.includes("OCR") ? "unsupported" : "ready");
+      }
+
+      setAutofillMessage(`${file.name}: ${payload.message || "Scan completed."}`);
+    } catch (error) {
+      setAutofillState("error");
+      setAutofillMessage(error instanceof Error ? error.message : "Unable to scan this document.");
+    }
+  }
+
+  async function handleDocumentUploaded(
+    rowId: string,
+    result: { path: string; signedUrl?: string },
+    file: File,
+  ) {
+    setDocumentUploads((uploads) => ({
+      ...uploads,
+      [rowId]: {
+        path: result.path,
+        fileName: file.name,
+        mimeType: file.type || "application/octet-stream",
+        size: file.size,
+      },
+    }));
+
+    await extractAutofillSuggestions(file);
+  }
+
+  function setFormElementValue(name: string, value: string) {
+    const element = formRef.current?.elements.namedItem(name);
+
+    if (
+      element instanceof HTMLInputElement ||
+      element instanceof HTMLTextAreaElement ||
+      element instanceof HTMLSelectElement
+    ) {
+      element.value = value;
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }
+
+  function applyAutofillSuggestions() {
+    const suggestionsToApply = autofillSuggestions.filter(
+      (suggestion) => selectedAutofillFields[suggestion.field] !== false,
+    );
+
+    for (const suggestion of suggestionsToApply) {
+      if (suggestion.field === "packageCount") {
+        setPackages(suggestion.value);
+      } else if (suggestion.field === "lengthCm") {
+        setLength(suggestion.value);
+      } else if (suggestion.field === "widthCm") {
+        setWidth(suggestion.value);
+      } else if (suggestion.field === "heightCm") {
+        setHeight(suggestion.value);
+      } else {
+        setFormElementValue(suggestion.field, suggestion.value);
+      }
+    }
+
+    setAppliedAutofillFields(suggestionsToApply.map((suggestion) => suggestion.field));
+    setAutofillMessage(
+      suggestionsToApply.length > 0
+        ? `Applied ${suggestionsToApply.length} reviewed field${suggestionsToApply.length === 1 ? "" : "s"}.`
+        : "No autofill suggestions are selected.",
+    );
+  }
+
+  function clearAutofillSuggestions() {
+    setAutofillSuggestions([]);
+    setSelectedAutofillFields({});
+    setAppliedAutofillFields([]);
+    setAutofillState("idle");
+    setAutofillMessage("");
+  }
+
   async function submitShipment(intent: "draft" | "created") {
     if (!formRef.current || saveState === "saving") {
       return;
@@ -104,6 +245,13 @@ export function CreateShipmentForm() {
       notes: read(`documentNotes:${rowId}`),
       upload: documentUploads[rowId],
     }));
+    const appliedAutofillSources = Array.from(
+      new Set(
+        autofillSuggestions
+          .filter((suggestion) => appliedAutofillFields.includes(suggestion.field))
+          .map((suggestion) => suggestion.sourceFileName),
+      ),
+    );
 
     setSaveState("saving");
     setErrorMessage("");
@@ -144,6 +292,10 @@ export function CreateShipmentForm() {
           containerNumber: read("containerNumber"),
           notes: read("notes"),
           documents,
+          autofill: {
+            appliedFields: appliedAutofillFields,
+            sourceFiles: appliedAutofillSources,
+          },
         }),
       });
 
@@ -167,12 +319,20 @@ export function CreateShipmentForm() {
   }
 
   function removeDocumentRow(rowId: string) {
+    const removedFileName = documentUploads[rowId]?.fileName;
+
     setDocumentRows((rows) => rows.filter((id) => id !== rowId));
     setDocumentUploads((uploads) => {
       const nextUploads = { ...uploads };
       delete nextUploads[rowId];
       return nextUploads;
     });
+
+    if (removedFileName) {
+      setAutofillSuggestions((suggestions) =>
+        suggestions.filter((suggestion) => suggestion.sourceFileName !== removedFileName),
+      );
+    }
   }
 
   return (
@@ -352,13 +512,90 @@ export function CreateShipmentForm() {
           <div>
             <h2 className="text-lg font-semibold text-slate-950">Initial Documents</h2>
             <p className="mt-1 text-sm text-zinc-600">
-              Attach shipment documents now, or save the shipment and complete the checklist later.
+              Attach shipment documents now, then review any autofill suggestions before applying them.
             </p>
           </div>
           <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
             Supabase Storage ready
           </span>
         </div>
+
+        {(autofillState !== "idle" || autofillSuggestions.length > 0) && (
+          <div className="mt-5 rounded-lg border border-sky-100 bg-sky-50 p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-sky-700" />
+                  <p className="text-sm font-semibold text-slate-950">Document autofill review</p>
+                </div>
+                <p className="mt-1 text-sm leading-6 text-zinc-700">
+                  Autofill is a review aid. It will not overwrite shipment fields until you choose Apply.
+                </p>
+                {autofillMessage && (
+                  <p
+                    className={
+                      autofillState === "error"
+                        ? "mt-2 text-sm font-medium text-rose-700"
+                        : autofillState === "unsupported"
+                          ? "mt-2 text-sm font-medium text-amber-800"
+                          : "mt-2 text-sm font-medium text-sky-800"
+                    }
+                  >
+                    {autofillMessage}
+                  </p>
+                )}
+              </div>
+              {autofillSuggestions.length > 0 && (
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={applyAutofillSuggestions}
+                    className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                  >
+                    Apply selected
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearAutofillSuggestions}
+                    className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-zinc-50"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {autofillSuggestions.length > 0 && (
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {autofillSuggestions.map((suggestion) => (
+                  <label
+                    key={suggestion.field}
+                    className="flex gap-3 rounded-md border border-white/80 bg-white p-3 text-sm shadow-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedAutofillFields[suggestion.field] !== false}
+                      onChange={(event) =>
+                        setSelectedAutofillFields((selection) => ({
+                          ...selection,
+                          [suggestion.field]: event.target.checked,
+                        }))
+                      }
+                      className="mt-1 h-4 w-4 rounded border-zinc-300"
+                    />
+                    <span>
+                      <span className="block font-semibold text-slate-950">{suggestion.label}</span>
+                      <span className="mt-1 block break-words text-zinc-700">{suggestion.value}</span>
+                      <span className="mt-1 block text-xs text-zinc-500">
+                        Source: {suggestion.sourceFileName}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="mt-5 space-y-4">
           {documentRows.map((rowId, index) => (
@@ -381,17 +618,7 @@ export function CreateShipmentForm() {
                 <StorageUploadField
                   shipmentId="intake-draft"
                   documentId={rowId}
-                  onUploaded={(result, file) =>
-                    setDocumentUploads((uploads) => ({
-                      ...uploads,
-                      [rowId]: {
-                        path: result.path,
-                        fileName: file.name,
-                        mimeType: file.type || "application/octet-stream",
-                        size: file.size,
-                      },
-                    }))
-                  }
+                  onUploaded={(result, file) => void handleDocumentUploaded(rowId, result, file)}
                 />
                 <SelectField
                   name={`documentStatus:${rowId}`}
