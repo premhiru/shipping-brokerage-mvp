@@ -323,3 +323,7 @@ export function isTextExtractableDocument(fileName: string, mimeType: string) {
     ["application/json", "application/csv"].includes(mimeType)
   );
 }
+
+export function isPdfDocument(fileName: string, mimeType: string) {
+  return mimeType === "application/pdf" || fileName.toLowerCase().endsWith(".pdf");
+}
