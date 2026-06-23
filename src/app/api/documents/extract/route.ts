@@ -2,7 +2,6 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { PDFParse } from "pdf-parse";
 import {
   extractShipmentFieldsFromText,
   isPdfDocument,
@@ -14,7 +13,9 @@ export const runtime = "nodejs";
 
 const MAX_EXTRACTION_BYTES = 5 * 1024 * 1024;
 
-function configurePdfWorker() {
+type PdfParser = typeof import("pdf-parse")["PDFParse"];
+
+function configurePdfWorker(PDFParse: PdfParser) {
   const require = createRequire(import.meta.url);
   const workerCandidates = [
     path.join(process.cwd(), "node_modules", "pdfjs-dist", "legacy", "build", "pdf.worker.mjs"),
@@ -28,7 +29,9 @@ function configurePdfWorker() {
 }
 
 async function extractPdfText(file: File) {
-  configurePdfWorker();
+  const { PDFParse } = await import("pdf-parse");
+
+  configurePdfWorker(PDFParse);
 
   const parser = new PDFParse({
     data: new Uint8Array(await file.arrayBuffer()),
