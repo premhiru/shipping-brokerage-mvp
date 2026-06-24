@@ -1,27 +1,46 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, Clock, FileCheck2, Ship } from "lucide-react";
+import { AlertTriangle, ClipboardList, Clock, FileCheck2, Ship } from "lucide-react";
 import { ShipmentTable } from "@/components/shipment-table";
 import { Badge, ButtonLink, Card, PageHeader, StatCard } from "@/components/ui";
-import { notifications, shipments as seedShipments } from "@/lib/demo-data";
+import { notifications as seedNotifications, shipments as seedShipments } from "@/lib/demo-data";
 import { formatDateTime } from "@/lib/format";
-import type { Shipment } from "@/lib/types";
+import type { Notification, Shipment, TaskAssignment } from "@/lib/types";
 
 export function DashboardClient() {
   const [allShipments, setAllShipments] = useState<Shipment[]>(seedShipments);
+  const [dashboardNotifications, setDashboardNotifications] = useState<Notification[]>(seedNotifications);
+  const [assignedTasks, setAssignedTasks] = useState<TaskAssignment[]>([]);
 
   useEffect(() => {
     const refresh = async () => {
       try {
-        const response = await fetch("/api/shipments", { cache: "no-store" });
-        const payload = (await response.json()) as { shipments?: Shipment[] };
+        const [shipmentsResponse, notificationsResponse, tasksResponse] = await Promise.all([
+          fetch("/api/shipments", { cache: "no-store" }),
+          fetch("/api/notifications", { cache: "no-store" }),
+          fetch("/api/tasks", { cache: "no-store" }),
+        ]);
 
-        if (response.ok && payload.shipments) {
-          setAllShipments(payload.shipments);
+        const shipmentsPayload = (await shipmentsResponse.json()) as { shipments?: Shipment[] };
+        const notificationsPayload = (await notificationsResponse.json()) as { notifications?: Notification[] };
+        const tasksPayload = (await tasksResponse.json()) as { tasks?: TaskAssignment[] };
+
+        if (shipmentsResponse.ok && shipmentsPayload.shipments) {
+          setAllShipments(shipmentsPayload.shipments);
+        }
+
+        if (notificationsResponse.ok && notificationsPayload.notifications) {
+          setDashboardNotifications(notificationsPayload.notifications);
+        }
+
+        if (tasksResponse.ok && tasksPayload.tasks) {
+          setAssignedTasks(tasksPayload.tasks);
         }
       } catch {
         setAllShipments(seedShipments);
+        setDashboardNotifications(seedNotifications);
+        setAssignedTasks([]);
       }
     };
 
@@ -98,10 +117,38 @@ export function DashboardClient() {
 
         <Card>
           <div className="flex items-center gap-3">
+            <ClipboardList className="h-5 w-5 text-emerald-700" />
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950">Assigned tasks</h2>
+              <p className="text-sm text-zinc-600">Open work assigned from shipment records.</p>
+            </div>
+          </div>
+          <div className="mt-5 space-y-4">
+            {assignedTasks.length === 0 && <p className="text-sm text-zinc-600">No assigned tasks yet.</p>}
+            {assignedTasks.slice(0, 6).map((task) => (
+              <div key={task.id}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold text-slate-950">{task.shipmentReference}</p>
+                  <Badge value={task.priority} />
+                </div>
+                <p className="mt-1 text-sm leading-6 text-zinc-600">{task.task}</p>
+                <p className="mt-1 text-xs text-zinc-500">
+                  {task.assignedTo}
+                  {task.dueDate ? ` - due ${task.dueDate}` : ""} - {formatDateTime(task.createdAt)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
+        <Card>
+          <div className="flex items-center gap-3">
             <Clock className="h-5 w-5 text-sky-700" />
             <div>
               <h2 className="text-lg font-semibold text-slate-950">Notifications</h2>
-              <p className="text-sm text-zinc-600">In-app alerts for the MVP.</p>
+              <p className="text-sm text-zinc-600">Live in-app alerts from shipment activity.</p>
             </div>
           </div>
           <div className="mt-5 space-y-4">
@@ -114,11 +161,33 @@ export function DashboardClient() {
                 <p className="mt-1 text-xs text-zinc-500">{formatDateTime(persistedCreated.lastUpdated)}</p>
               </div>
             )}
-            {notifications.map((notification) => (
-              <div key={`${notification.title}-${notification.createdAt}`}>
+            {dashboardNotifications.map((notification) => (
+              <div key={notification.id ?? `${notification.title}-${notification.createdAt}`}>
                 <p className="font-semibold text-slate-950">{notification.title}</p>
                 <p className="mt-1 text-sm leading-6 text-zinc-600">{notification.message}</p>
                 <p className="mt-1 text-xs text-zinc-500">{formatDateTime(notification.createdAt)}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card>
+          <div className="flex items-center gap-3">
+            <FileCheck2 className="h-5 w-5 text-emerald-600" />
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950">Document focus</h2>
+              <p className="text-sm text-zinc-600">Shipments that need review.</p>
+            </div>
+          </div>
+          <div className="mt-5 space-y-4">
+            {blocked.length === 0 && <p className="text-sm text-zinc-600">No document blockers right now.</p>}
+            {blocked.slice(0, 5).map((shipment) => (
+              <div key={shipment.id}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold text-slate-950">{shipment.reference}</p>
+                  <Badge value={shipment.documentStatus} />
+                </div>
+                <p className="mt-1 text-sm leading-6 text-zinc-600">{shipment.nextAction}</p>
               </div>
             ))}
           </div>

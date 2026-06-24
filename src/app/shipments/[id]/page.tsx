@@ -11,6 +11,7 @@ import {
   ShipmentTabs,
   TimelinePanel,
 } from "@/components/shipment-detail";
+import { ShipmentTaskCard } from "@/components/shipment-task-card";
 import { ButtonLink, PageHeader } from "@/components/ui";
 import { getShipment } from "@/lib/demo-data";
 import { getSupabaseShipment } from "@/lib/supabase-shipments";
@@ -34,6 +35,7 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
       />
       <ShipmentTabs shipment={shipment} />
       <ShipmentSummary shipment={shipment} />
+      <ShipmentTaskCard shipment={shipment} />
       <ShipmentOverview shipment={shipment} />
       <CargoPanel shipment={shipment} />
       <DocumentsPanel shipment={shipment} />

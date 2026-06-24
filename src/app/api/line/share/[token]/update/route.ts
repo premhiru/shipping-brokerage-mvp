@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import { documentLabelToValue } from "@/lib/document-types";
 import { createSupabaseServerClient, jsonError } from "@/lib/supabase-server";
+import { createShipmentNotification } from "@/lib/supabase-notifications";
 import { DEMO_COMPANY_ID } from "@/lib/storage";
 
 export const runtime = "nodejs";
@@ -64,6 +65,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     const shipmentId = shareLink.shipment_id as string;
     const recipientName = (shareLink.recipient_name as string | null) ?? "Carrier contact";
     const recipientCompany = (shareLink.recipient_company as string | null) ?? "Carrier";
+
+    const { data: shipment, error: shipmentError } = await supabase
+      .from("shipments")
+      .select("shipment_reference")
+      .eq("company_id", DEMO_COMPANY_ID)
+      .eq("id", shipmentId)
+      .maybeSingle();
+
+    if (shipmentError) {
+      throw new Error(shipmentError.message);
+    }
 
     const { error: eventError } = await supabase.from("shipment_events").insert({
       company_id: DEMO_COMPANY_ID,
@@ -154,6 +166,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     if (shareLinkUpdateError) {
       throw new Error(shareLinkUpdateError.message);
     }
+
+    await createShipmentNotification({
+      shipmentId,
+      title: `${shipment?.shipment_reference ?? "Shipment"} updated by ${recipientCompany}`,
+      message: `${recipientName} submitted ${statusUpdate}. ${notes}`,
+    });
 
     return Response.json({ ok: true });
   } catch (error) {

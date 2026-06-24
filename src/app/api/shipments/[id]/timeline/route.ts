@@ -1,4 +1,5 @@
 import { createSupabaseServerClient, jsonError } from "@/lib/supabase-server";
+import { createShipmentNotification } from "@/lib/supabase-notifications";
 import { DEMO_COMPANY_ID } from "@/lib/storage";
 import type { MilestoneStatus } from "@/lib/types";
 
@@ -136,6 +137,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const eventTimestamp = timestamp ? new Date(timestamp).toISOString() : new Date().toISOString();
     const nextBlStatus = blStatusFromMilestone(milestone, status);
 
+    const { data: shipment, error: shipmentLookupError } = await supabase
+      .from("shipments")
+      .select("shipment_reference")
+      .eq("company_id", DEMO_COMPANY_ID)
+      .eq("id", id)
+      .maybeSingle();
+
+    if (shipmentLookupError) {
+      throw new Error(shipmentLookupError.message);
+    }
+
+    if (!shipment) {
+      return jsonError("Shipment was not found.", 404);
+    }
+
     const { error: eventError } = await supabase.from("shipment_events").insert({
       company_id: DEMO_COMPANY_ID,
       shipment_id: id,
@@ -186,6 +202,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (auditError) {
       throw new Error(auditError.message);
     }
+
+    await createShipmentNotification({
+      shipmentId: id,
+      title: `${shipment.shipment_reference} timeline updated`,
+      message: `${responsibleParty} marked ${milestone} ${status}. ${notes}`,
+    });
 
     return Response.json({ ok: true, blStatus: nextBlStatus });
   } catch (error) {

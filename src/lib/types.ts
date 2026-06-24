@@ -149,8 +149,24 @@ export type FeedbackItem = {
 };
 
 export type Notification = {
+  id?: string;
   title: string;
   message: string;
+  shipmentId?: string;
   shipmentReference?: string;
+  isRead?: boolean;
+  createdAt: string;
+};
+
+export type TaskAssignment = {
+  id: string;
+  shipmentId: string;
+  shipmentReference: string;
+  task: string;
+  assignedTo: string;
+  assignedBy: string;
+  dueDate?: string;
+  priority: Priority;
+  status: "open" | "done";
   createdAt: string;
 };

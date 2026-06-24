@@ -1,4 +1,5 @@
 import { createSupabaseServerClient, jsonError } from "@/lib/supabase-server";
+import { createShipmentNotification } from "@/lib/supabase-notifications";
 import { DEMO_COMPANY_ID } from "@/lib/storage";
 import { isShipmentStatus, shipmentStatusLabel } from "@/lib/shipment-status";
 
@@ -96,6 +97,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (auditError) {
       throw new Error(auditError.message);
     }
+
+    await createShipmentNotification({
+      shipmentId: id,
+      title: `${shipment.shipment_reference} status updated`,
+      message: `${shipment.shipment_reference} moved to ${statusLabel}. ${note}`,
+    });
 
     return Response.json({
       ok: true,
