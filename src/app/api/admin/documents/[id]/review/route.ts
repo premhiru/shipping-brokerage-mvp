@@ -64,7 +64,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const shipmentDocumentStatus =
       decision === "reject" ? "needs_review" : remainingNeedsReview.length === 0 ? "approved" : "needs_review";
 
-    await supabase
+    const { error: shipmentUpdateError } = await supabase
       .from("shipments")
       .update({
         document_status: shipmentDocumentStatus,
@@ -76,7 +76,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .eq("company_id", DEMO_COMPANY_ID)
       .eq("id", document.shipment_id);
 
-    await supabase.from("audit_logs").insert({
+    if (shipmentUpdateError) {
+      throw new Error(shipmentUpdateError.message);
+    }
+
+    const { error: auditError } = await supabase.from("audit_logs").insert({
       company_id: DEMO_COMPANY_ID,
       shipment_id: document.shipment_id,
       actor_name: "Demo Admin",
@@ -89,6 +93,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         rejectionReason: decision === "reject" ? rejectionReason : null,
       },
     });
+
+    if (auditError) {
+      throw new Error(auditError.message);
+    }
 
     return Response.json({ ok: true, status });
   } catch (error) {

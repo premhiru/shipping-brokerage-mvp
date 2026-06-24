@@ -5,7 +5,7 @@ import { getSupabaseShipment } from "@/lib/supabase-shipments";
 
 export default async function ShipmentTimelinePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const shipment = getShipment(id) ?? await getSupabaseShipment(id);
+  const shipment = (await getSupabaseShipment(id)) ?? getShipment(id);
 
   if (!shipment) {
     notFound();

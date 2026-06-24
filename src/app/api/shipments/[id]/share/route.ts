@@ -57,7 +57,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       throw new Error(error.message);
     }
 
-    await supabase
+    const { error: shipmentUpdateError } = await supabase
       .from("shipments")
       .update({
         status: "shared_with_line",
@@ -67,7 +67,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .eq("company_id", DEMO_COMPANY_ID)
       .eq("id", id);
 
-    await supabase.from("audit_logs").insert({
+    if (shipmentUpdateError) {
+      throw new Error(shipmentUpdateError.message);
+    }
+
+    const { error: auditError } = await supabase.from("audit_logs").insert({
       company_id: DEMO_COMPANY_ID,
       shipment_id: id,
       actor_name: "Demo Admin",
@@ -75,6 +79,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       action: "share_link_created",
       metadata: { recipientCompany, recipientName, recipientEmail, expiresAt },
     });
+
+    if (auditError) {
+      throw new Error(auditError.message);
+    }
 
     return Response.json({
       shareLink: {

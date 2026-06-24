@@ -71,7 +71,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
     const nextShipmentStatus = statusToShipmentStatus[statusUpdate] ?? "shared_with_line";
 
-    await supabase
+    const { error: shipmentUpdateError } = await supabase
       .from("shipments")
       .update({
         status: nextShipmentStatus,
@@ -80,8 +80,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       .eq("company_id", DEMO_COMPANY_ID)
       .eq("id", shipmentId);
 
+    if (shipmentUpdateError) {
+      throw new Error(shipmentUpdateError.message);
+    }
+
     if (fileName && shareLink.can_upload_documents) {
-      await supabase.from("documents").insert({
+      const { error: documentError } = await supabase.from("documents").insert({
         company_id: DEMO_COMPANY_ID,
         shipment_id: shipmentId,
         document_type: documentLabelToValue(uploadType),
@@ -90,19 +94,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
         uploaded_at: new Date().toISOString(),
         status: "uploaded",
       });
+
+      if (documentError) {
+        throw new Error(documentError.message);
+      }
     }
 
     if (shareLink.can_comment) {
-      await supabase.from("comments").insert({
+      const { error: commentError } = await supabase.from("comments").insert({
         company_id: DEMO_COMPANY_ID,
         shipment_id: shipmentId,
         user_name: recipientName,
         user_role: "shipping_line_guest",
         message: `${statusUpdate}: ${notes}`,
       });
+
+      if (commentError) {
+        throw new Error(commentError.message);
+      }
     }
 
-    await supabase.from("audit_logs").insert({
+    const { error: auditError } = await supabase.from("audit_logs").insert({
       company_id: DEMO_COMPANY_ID,
       shipment_id: shipmentId,
       actor_name: recipientName,
@@ -111,11 +123,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       metadata: { statusUpdate, uploadType, fileName, notes },
     });
 
-    await supabase
+    if (auditError) {
+      throw new Error(auditError.message);
+    }
+
+    const { error: shareLinkUpdateError } = await supabase
       .from("share_links")
       .update({ last_viewed_at: new Date().toISOString() })
       .eq("company_id", DEMO_COMPANY_ID)
       .eq("token_hash", tokenHash);
+
+    if (shareLinkUpdateError) {
+      throw new Error(shareLinkUpdateError.message);
+    }
 
     return Response.json({ ok: true });
   } catch (error) {

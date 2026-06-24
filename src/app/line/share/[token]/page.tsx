@@ -5,7 +5,7 @@ import { getSupabaseShipmentByShareToken } from "@/lib/supabase-shipments";
 
 export default async function ShippingLineSharePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const shipment = getShipmentByShareToken(token) ?? await getSupabaseShipmentByShareToken(token);
+  const shipment = (await getSupabaseShipmentByShareToken(token)) ?? getShipmentByShareToken(token);
   const shareLink = shipment?.shareLinks.find((link) => link.token === token);
 
   if (!shipment || !shareLink) {
