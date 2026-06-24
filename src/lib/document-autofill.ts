@@ -184,6 +184,7 @@ function escapeRegExp(value: string) {
 function normalizeText(value: string) {
   return value
     .replace(/\r/g, "\n")
+    .replace(/®/g, "")
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -247,7 +248,33 @@ function cleanIsoDate(value: string) {
     return `${dayFirst[3]}-${dayFirst[2].padStart(2, "0")}-${dayFirst[1].padStart(2, "0")}`;
   }
 
+  const namedMonth = value.match(/\b(0?[1-9]|[12]\d|3[01])[-\s]([A-Za-z]{3,9})[-\s](20\d{2})\b/);
+  const monthNumber = namedMonth ? monthNameToNumber(namedMonth[2]) : "";
+  if (namedMonth && monthNumber) {
+    return `${namedMonth[3]}-${monthNumber}-${namedMonth[1].padStart(2, "0")}`;
+  }
+
   return "";
+}
+
+function monthNameToNumber(value: string) {
+  const normalized = value.slice(0, 3).toLowerCase();
+  const months: Record<string, string> = {
+    jan: "01",
+    feb: "02",
+    mar: "03",
+    apr: "04",
+    may: "05",
+    jun: "06",
+    jul: "07",
+    aug: "08",
+    sep: "09",
+    oct: "10",
+    nov: "11",
+    dec: "12",
+  };
+
+  return months[normalized] ?? "";
 }
 
 function readLabeledValue(lines: string[], spec: FieldSpec) {
@@ -274,6 +301,240 @@ function readLabeledValue(lines: string[], spec: FieldSpec) {
   }
 
   return "";
+}
+
+function createSuggestion(
+  field: AutofillField,
+  value: string,
+  sourceFileName: string,
+  confidence: AutofillConfidence = "medium",
+): AutofillSuggestion | null {
+  const label = FIELD_SPECS.find((spec) => spec.field === field)?.label;
+  const cleanedValue = cleanValue(value);
+
+  if (!label || !cleanedValue) {
+    return null;
+  }
+
+  return {
+    field,
+    label,
+    value: cleanedValue,
+    sourceFileName,
+    confidence,
+  };
+}
+
+function addSuggestion(
+  suggestions: AutofillSuggestion[],
+  seenFields: Set<AutofillField>,
+  field: AutofillField,
+  value: string,
+  sourceFileName: string,
+  confidence: AutofillConfidence = "medium",
+) {
+  if (seenFields.has(field)) {
+    return;
+  }
+
+  const suggestion = createSuggestion(field, value, sourceFileName, confidence);
+
+  if (suggestion) {
+    suggestions.push(suggestion);
+    seenFields.add(field);
+  }
+}
+
+function findLineIndex(lines: string[], pattern: RegExp) {
+  return lines.findIndex((line) => pattern.test(line));
+}
+
+function firstLineAfterHeading(lines: string[], pattern: RegExp) {
+  const headingIndex = findLineIndex(lines, pattern);
+
+  if (headingIndex === -1) {
+    return "";
+  }
+
+  return lines.slice(headingIndex + 1).find((line) => {
+    if (/^(export references|phone:|fax:|place of receipt|port of loading|notify party|consignee|forwarding agent)$/i.test(line)) {
+      return false;
+    }
+
+    return /[A-Za-z]/.test(line);
+  }) ?? "";
+}
+
+function isLikelyContainerNumber(value: string) {
+  return /^[A-Z]{4}\d{7}$/.test(value);
+}
+
+function findBillOfLadingNumber(lines: string[], sourceFileName: string) {
+  const fileNameMatch = sourceFileName.toUpperCase().match(/\b[A-Z]{2,4}\d{7,}\b/);
+  if (fileNameMatch && !isLikelyContainerNumber(fileNameMatch[0])) {
+    return fileNameMatch[0];
+  }
+
+  for (const line of lines) {
+    const candidates = line.toUpperCase().match(/\b[A-Z]{2,4}\d{7,}\b/g) ?? [];
+    const billNumber = candidates.find((candidate) => !isLikelyContainerNumber(candidate));
+
+    if (billNumber) {
+      return billNumber;
+    }
+  }
+
+  return "";
+}
+
+function splitRepeatedDestination(value: string) {
+  const tokens = value.trim().split(/\s+/);
+
+  if (tokens.length >= 2 && tokens.length % 2 === 0) {
+    const midpoint = tokens.length / 2;
+    const firstHalf = tokens.slice(0, midpoint).join(" ");
+    const secondHalf = tokens.slice(midpoint).join(" ");
+
+    if (firstHalf === secondHalf) {
+      return [firstHalf, secondHalf] as const;
+    }
+  }
+
+  const compactMatch = value.match(/^(.+?)\s{2,}(.+)$/);
+  if (compactMatch) {
+    return [compactMatch[1].trim(), compactMatch[2].trim()] as const;
+  }
+
+  return [value.trim(), value.trim()] as const;
+}
+
+function extractRouteValues(routeLine: string) {
+  const match = routeLine.match(
+    /^([A-Z][A-Z .'-]+?,\s*[A-Z][A-Z .'-]+?)\s+([A-Z][A-Z .'-]+?,\s*[A-Z][A-Z .'-]+?)\s+(.+)$/i,
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  const [pod, destination] = splitRepeatedDestination(match[3]);
+
+  return {
+    origin: cleanValue(match[1]),
+    pol: cleanValue(match[2]),
+    pod: cleanValue(pod),
+    destination: cleanValue(destination),
+  };
+}
+
+function findCargoDescription(lines: string[]) {
+  const headerIndex = findLineIndex(lines, /description of packages and goods/i);
+  const startIndex = headerIndex === -1 ? findLineIndex(lines, /details of cargo/i) : headerIndex;
+
+  if (startIndex === -1) {
+    return "";
+  }
+
+  for (const line of lines.slice(startIndex + 1)) {
+    if (/^(total:|container\s+seals|freight charges)/i.test(line)) {
+      return "";
+    }
+
+    if (
+      /^n\/m\b/i.test(line) ||
+      /^package\(s/i.test(line) ||
+      /^\)$/i.test(line) ||
+      /^\d+\s+package/i.test(line) ||
+      /^[\d,.]+\s*(kg|kgs|m3|cbm)\b/i.test(line)
+    ) {
+      continue;
+    }
+
+    if (/[A-Za-z]/.test(line)) {
+      return line;
+    }
+  }
+
+  return "";
+}
+
+function hasBillOfLadingSignals(lines: string[], sourceFileName: string) {
+  return (
+    /bill\s+of\s+lading|b\/l/i.test(sourceFileName) ||
+    lines.some((line) =>
+      /bill\s+of\s+lading|no\. of original b\/l|shipped on board|container\s+seals|master bill/i.test(line),
+    )
+  );
+}
+
+function addBillOfLadingSuggestions(
+  lines: string[],
+  suggestions: AutofillSuggestion[],
+  seenFields: Set<AutofillField>,
+  sourceFileName: string,
+) {
+  if (!hasBillOfLadingSignals(lines, sourceFileName)) {
+    return;
+  }
+
+  addSuggestion(suggestions, seenFields, "blNumber", findBillOfLadingNumber(lines, sourceFileName), sourceFileName);
+  addSuggestion(
+    suggestions,
+    seenFields,
+    "shipperName",
+    firstLineAfterHeading(lines, /shipper\s*\/\s*exporter/i),
+    sourceFileName,
+  );
+  addSuggestion(
+    suggestions,
+    seenFields,
+    "consigneeName",
+    firstLineAfterHeading(lines, /^consignee\b/i),
+    sourceFileName,
+  );
+  addSuggestion(
+    suggestions,
+    seenFields,
+    "notifyParty",
+    firstLineAfterHeading(lines, /^notify party\b/i),
+    sourceFileName,
+  );
+
+  const carrierLine = [...lines].reverse().find((line) => /as agent for the carrier/i.test(line));
+  addSuggestion(
+    suggestions,
+    seenFields,
+    "carrier",
+    carrierLine?.replace(/.*as agent for the carrier\s+/i, "") || lines[0] || "",
+    sourceFileName,
+  );
+
+  const routeHeaderIndex = findLineIndex(lines, /place of receipt\s+port of loading\s+port of discharge\s+final destination/i);
+  const routeValues = routeHeaderIndex === -1 ? null : extractRouteValues(lines[routeHeaderIndex + 1] ?? "");
+  if (routeValues) {
+    addSuggestion(suggestions, seenFields, "origin", routeValues.origin, sourceFileName);
+    addSuggestion(suggestions, seenFields, "pol", routeValues.pol, sourceFileName);
+    addSuggestion(suggestions, seenFields, "pod", routeValues.pod, sourceFileName);
+    addSuggestion(suggestions, seenFields, "destination", routeValues.destination, sourceFileName);
+  }
+
+  addSuggestion(suggestions, seenFields, "cargoDescription", findCargoDescription(lines), sourceFileName);
+
+  const containerLine = lines.find((line) => /\b[A-Z]{4}\d{7}\b/.test(line));
+  if (containerLine) {
+    const containerNumber = containerLine.match(/\b[A-Z]{4}\d{7}\b/)?.[0] ?? "";
+    const containerType = containerLine.match(/\b(20GP|40GP|40HC|40RF|LCL)\b/i)?.[1] ?? "";
+    const containerValues = containerLine.match(/\b(20GP|40GP|40HC|40RF|LCL)\b\s+([\d,.]+)\s+([\d,.]+)\s+(\d+)/i);
+
+    addSuggestion(suggestions, seenFields, "containerNumber", containerNumber, sourceFileName);
+    addSuggestion(suggestions, seenFields, "containerType", cleanContainerType(containerType), sourceFileName);
+    addSuggestion(suggestions, seenFields, "grossWeightKg", containerValues?.[2] ?? "", sourceFileName);
+    addSuggestion(suggestions, seenFields, "packageCount", containerValues?.[4] ?? "", sourceFileName);
+  }
+
+  const shippedOnBoardIndex = findLineIndex(lines, /no\. of original b\/l\s+shipped on board/i);
+  const shippedOnBoardDate = shippedOnBoardIndex === -1 ? "" : cleanIsoDate(lines[shippedOnBoardIndex + 1] ?? "");
+  addSuggestion(suggestions, seenFields, "preferredEtd", shippedOnBoardDate, sourceFileName);
 }
 
 export function extractShipmentFieldsFromText(text: string, sourceFileName: string): AutofillSuggestion[] {
@@ -311,6 +572,8 @@ export function extractShipmentFieldsFromText(text: string, sourceFileName: stri
     });
     seenFields.add(spec.field);
   }
+
+  addBillOfLadingSuggestions(lines, suggestions, seenFields, sourceFileName);
 
   return suggestions;
 }
