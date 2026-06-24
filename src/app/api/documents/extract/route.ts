@@ -5,7 +5,6 @@ import { pathToFileURL } from "node:url";
 import {
   extractShipmentFieldsFromText,
   isExcelDocument,
-  isLegacyExcelDocument,
   isPdfDocument,
   isTextExtractableDocument,
 } from "@/lib/document-autofill";
@@ -82,30 +81,28 @@ function normalizeCellText(value: string) {
 }
 
 async function extractExcelText(file: File) {
-  const ExcelJS = (await import("exceljs")).default;
-  const workbook = new ExcelJS.Workbook();
-  const fileBuffer = Buffer.from(await file.arrayBuffer()) as unknown as Parameters<typeof workbook.xlsx.load>[0];
+  const XLSX = await import("xlsx");
+  const fileBuffer = Buffer.from(await file.arrayBuffer());
+  const workbook = XLSX.read(fileBuffer, {
+    cellDates: true,
+    cellText: true,
+    type: "buffer",
+  });
   const lines: string[] = [];
 
-  await workbook.xlsx.load(fileBuffer);
-
-  workbook.eachSheet((worksheet) => {
-    const rows: string[][] = [];
-
-    lines.push(`Sheet: ${worksheet.name}`);
-
-    worksheet.eachRow({ includeEmpty: false }, (row) => {
-      const maxCellCount = Math.min(row.cellCount, 50);
-      const cells: string[] = [];
-
-      for (let columnIndex = 1; columnIndex <= maxCellCount; columnIndex += 1) {
-        cells.push(normalizeCellText(row.getCell(columnIndex).text ?? ""));
-      }
-
-      if (cells.some(Boolean)) {
-        rows.push(cells);
-      }
+  for (const sheetName of workbook.SheetNames) {
+    const worksheet = workbook.Sheets[sheetName];
+    const rawRows = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
+      blankrows: false,
+      defval: "",
+      header: 1,
+      raw: false,
     });
+    const rows = rawRows
+      .map((row) => row.slice(0, 50).map((cell) => normalizeCellText(String(cell ?? ""))))
+      .filter((row) => row.some(Boolean));
+
+    lines.push(`Sheet: ${sheetName}`);
 
     rows.slice(0, 200).forEach((cells, rowIndex) => {
       const filledCells = cells.filter(Boolean);
@@ -133,7 +130,7 @@ async function extractExcelText(file: File) {
         }
       });
     });
-  });
+  }
 
   return lines.join("\n").trim();
 }
@@ -185,18 +182,11 @@ export async function POST(request: Request) {
       });
     }
 
-    if (isLegacyExcelDocument(file.name, file.type)) {
-      return Response.json({
-        suggestions: [],
-        message: "Legacy .xls files are not supported yet. Save the workbook as .xlsx or .xlsm for autofill.",
-      });
-    }
-
     if (!isTextExtractableDocument(file.name, file.type)) {
       return Response.json({
         suggestions: [],
         message:
-          "This MVP can autofill from PDFs with selectable text, Excel workbooks (.xlsx/.xlsm), text, CSV, JSON, Markdown, and TSV files. Image OCR and legacy .xls can be added next.",
+          "This MVP can autofill from PDFs with selectable text, Excel workbooks (.xls/.xlsx/.xlsm), text, CSV, JSON, Markdown, and TSV files. Image OCR can be added next.",
       });
     }
 
