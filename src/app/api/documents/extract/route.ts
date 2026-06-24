@@ -4,6 +4,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   extractShipmentFieldsFromText,
+  isExcelDocument,
+  isLegacyExcelDocument,
   isPdfDocument,
   isTextExtractableDocument,
 } from "@/lib/document-autofill";
@@ -59,6 +61,83 @@ async function extractPdfText(file: File) {
   }
 }
 
+function looksLikeHeaderRow(cells: string[]) {
+  const filledCells = cells.filter(Boolean);
+
+  if (filledCells.length < 2) {
+    return false;
+  }
+
+  const headerSignals = filledCells.filter((cell) =>
+    /\b(shipper|consignee|notify|cargo|description|origin|destination|gross|weight|container|b\/l|bl|booking|carrier|incoterm|pol|pod|etd|eta|hs|package|pkgs)\b/i.test(
+      cell,
+    ),
+  );
+
+  return headerSignals.length >= 2;
+}
+
+function normalizeCellText(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+async function extractExcelText(file: File) {
+  const ExcelJS = (await import("exceljs")).default;
+  const workbook = new ExcelJS.Workbook();
+  const fileBuffer = Buffer.from(await file.arrayBuffer()) as unknown as Parameters<typeof workbook.xlsx.load>[0];
+  const lines: string[] = [];
+
+  await workbook.xlsx.load(fileBuffer);
+
+  workbook.eachSheet((worksheet) => {
+    const rows: string[][] = [];
+
+    lines.push(`Sheet: ${worksheet.name}`);
+
+    worksheet.eachRow({ includeEmpty: false }, (row) => {
+      const maxCellCount = Math.min(row.cellCount, 50);
+      const cells: string[] = [];
+
+      for (let columnIndex = 1; columnIndex <= maxCellCount; columnIndex += 1) {
+        cells.push(normalizeCellText(row.getCell(columnIndex).text ?? ""));
+      }
+
+      if (cells.some(Boolean)) {
+        rows.push(cells);
+      }
+    });
+
+    rows.slice(0, 200).forEach((cells, rowIndex) => {
+      const filledCells = cells.filter(Boolean);
+
+      if (filledCells.length === 0) {
+        return;
+      }
+
+      lines.push(filledCells.join(" | "));
+
+      if (filledCells.length >= 2 && !looksLikeHeaderRow(cells)) {
+        lines.push(`${filledCells[0]}: ${filledCells.slice(1).join(" ")}`);
+      }
+
+      const nextRow = rows[rowIndex + 1];
+      if (!nextRow || !looksLikeHeaderRow(cells)) {
+        return;
+      }
+
+      cells.forEach((header, columnIndex) => {
+        const value = nextRow[columnIndex];
+
+        if (header && value) {
+          lines.push(`${header}: ${value}`);
+        }
+      });
+    });
+  });
+
+  return lines.join("\n").trim();
+}
+
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -93,11 +172,31 @@ export async function POST(request: Request) {
       });
     }
 
+    if (isExcelDocument(file.name, file.type)) {
+      const text = await extractExcelText(file);
+      const suggestions = extractShipmentFieldsFromText(text, file.name);
+
+      return Response.json({
+        suggestions,
+        message:
+          suggestions.length > 0
+            ? `Found ${suggestions.length} shipment field suggestion${suggestions.length === 1 ? "" : "s"} from Excel workbook.`
+            : "Excel workbook text was extracted, but no labeled shipment fields were found.",
+      });
+    }
+
+    if (isLegacyExcelDocument(file.name, file.type)) {
+      return Response.json({
+        suggestions: [],
+        message: "Legacy .xls files are not supported yet. Save the workbook as .xlsx or .xlsm for autofill.",
+      });
+    }
+
     if (!isTextExtractableDocument(file.name, file.type)) {
       return Response.json({
         suggestions: [],
         message:
-          "This MVP can autofill from PDFs with selectable text, text, CSV, JSON, Markdown, and TSV files. Image OCR can be added next.",
+          "This MVP can autofill from PDFs with selectable text, Excel workbooks (.xlsx/.xlsm), text, CSV, JSON, Markdown, and TSV files. Image OCR and legacy .xls can be added next.",
       });
     }
 

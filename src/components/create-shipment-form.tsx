@@ -148,7 +148,12 @@ export function CreateShipmentForm() {
         mergeAutofillSuggestions(suggestions);
         setAutofillState("ready");
       } else {
-        setAutofillState(payload.message?.includes("PDF") || payload.message?.includes("OCR") ? "unsupported" : "ready");
+        const message = payload.message ?? "";
+        setAutofillState(
+          message.includes("PDF") || message.includes("OCR") || message.includes("not supported")
+            ? "unsupported"
+            : "ready",
+        );
       }
 
       setAutofillMessage(`${file.name}: ${payload.message || "Scan completed."}`);
@@ -335,184 +340,14 @@ export function CreateShipmentForm() {
     }
   }
 
-  return (
-    <form
-      ref={formRef}
-      className="space-y-5"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void submitShipment("created");
-      }}
-    >
-      {saveState !== "idle" && (
-        <Card
-          className={
-            saveState === "created"
-              ? "border-emerald-200 bg-emerald-50"
-              : saveState === "error"
-                ? "border-rose-200 bg-rose-50"
-                : "border-sky-200 bg-sky-50"
-          }
-        >
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-700">
-                {saveState === "saving"
-                  ? "Saving shipment"
-                  : saveState === "created"
-                    ? "Shipment created in Supabase"
-                    : saveState === "error"
-                      ? "Shipment was not saved"
-                      : "Draft saved in Supabase"}
-              </p>
-              <h2 className="mt-2 text-xl font-semibold text-slate-950">
-                {createdShipment?.reference || "Working..."}
-              </h2>
-              <p className="mt-1 text-sm leading-6 text-zinc-700">
-                {saveState === "saving"
-                  ? "Writing the shipment, cargo, timeline, and document metadata to the database."
-                  : saveState === "error"
-                    ? errorMessage
-                    : "The MVP wrote this shipment to Supabase. It will appear on the dashboard and shipment board for every user."}
-              </p>
-            </div>
-            {createdShipment && (
-              <div className="flex flex-wrap gap-2">
-                <Link
-                  href={`/shipments/${createdShipment.id}`}
-                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white"
-                >
-                  View created shipment
-                </Link>
-                <Link
-                  href="/shipments"
-                  className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-slate-950"
-                >
-                  View shipment board
-                </Link>
-              </div>
-            )}
-          </div>
-        </Card>
-      )}
-
-      <Card>
-        <h2 className="text-lg font-semibold text-slate-950">Shipment Reference</h2>
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
-          <div>
-            <TextInput
-              label="Shipment reference"
-              name="shipmentReference"
-              value={shipmentReference}
-              onChange={(event) => setShipmentReference(event.target.value)}
-            />
-            <p className="mt-1 text-xs text-zinc-500">
-              {referenceState === "loading"
-                ? "Checking latest Supabase shipment reference..."
-                : referenceState === "ready"
-                  ? "Auto-filled from the latest Supabase shipment reference."
-                  : "Using fallback reference; duplicate protection still runs on save."}
-            </p>
-          </div>
-          <TextInput label="Carrier / shipping line" name="carrier" placeholder="e.g. Maersk" />
-          <TextInput label="Booking number" name="bookingNumber" placeholder="Optional" />
-        </div>
-      </Card>
-
-      <Card>
-        <h2 className="text-lg font-semibold text-slate-950">Parties</h2>
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
-          <TextInput label="Shipper name" name="shipperName" placeholder="Exporter or shipper" required />
-          <TextInput label="Consignee name" name="consigneeName" placeholder="Buyer or consignee" required />
-          <TextInput label="Notify party" name="notifyParty" placeholder="Notify party" />
-        </div>
-      </Card>
-
-      <Card>
-        <h2 className="text-lg font-semibold text-slate-950">Cargo Details</h2>
-        <div className="mt-5 grid gap-4 md:grid-cols-4">
-          <div className="md:col-span-2">
-            <TextInput label="Cargo description" name="cargoDescription" placeholder="Describe cargo clearly" required />
-          </div>
-          <TextInput label="Item type" name="itemType" placeholder="Electronics, DG, reefer..." />
-          <TextInput label="HS code" name="hsCode" placeholder="e.g. 8517.62" />
-          <label className="block">
-            <span className="text-sm font-medium text-slate-800">Package count</span>
-            <input
-              name="packageCount"
-              value={packages}
-              onChange={(event) => setPackages(event.target.value)}
-              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-800">Length (cm)</span>
-            <input
-              name="lengthCm"
-              value={length}
-              onChange={(event) => setLength(event.target.value)}
-              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-800">Width (cm)</span>
-            <input
-              name="widthCm"
-              value={width}
-              onChange={(event) => setWidth(event.target.value)}
-              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-slate-800">Height (cm)</span>
-            <input
-              name="heightCm"
-              value={height}
-              onChange={(event) => setHeight(event.target.value)}
-              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
-            />
-          </label>
-          <TextInput label="Gross weight (kg)" name="grossWeightKg" placeholder="0.00" />
-          <TextInput label="Net weight (kg)" name="netWeightKg" placeholder="0.00" />
-          <div className="rounded-lg border border-sky-100 bg-sky-50 p-4 md:col-span-2">
-            <p className="text-sm font-semibold text-sky-900">Calculated CBM</p>
-            <p className="mt-2 text-3xl font-semibold text-slate-950">{cbm}</p>
-            <p className="mt-1 text-xs text-zinc-600">Length x width x height x package count / 1,000,000</p>
-          </div>
-        </div>
-      </Card>
-
-      <Card>
-        <h2 className="text-lg font-semibold text-slate-950">Routing</h2>
-        <div className="mt-5 grid gap-4 md:grid-cols-4">
-          <SelectField label="Incoterm" name="incoterm" options={["FOB", "CIF", "CFR", "DAP", "EXW", "DDP"]} />
-          <TextInput label="Origin" name="origin" placeholder="Singapore" required />
-          <TextInput label="Destination" name="destination" placeholder="Rotterdam" required />
-          <SelectField name="containerType" label="Container type" options={["20GP", "40GP", "40HC", "40RF", "LCL"]} />
-          <TextInput label="POL" name="pol" placeholder="Port of loading" />
-          <TextInput label="POD" name="pod" placeholder="Port of discharge" />
-          <TextInput label="Preferred ETD" name="preferredEtd" type="date" />
-          <TextInput label="Preferred ETA" name="preferredEta" type="date" />
-        </div>
-      </Card>
-
-      <Card>
-        <h2 className="text-lg font-semibold text-slate-950">References and Notes</h2>
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
-          <TextInput label="B/L number" name="blNumber" placeholder="Optional" />
-          <TextInput label="Container number" name="containerNumber" placeholder="Optional" />
-          <div className="md:col-span-3">
-            <TextArea name="notes" label="Notes" placeholder="Add handling notes, compliance constraints, or buyer requests." />
-          </div>
-        </div>
-      </Card>
-
+  function renderInitialDocumentsCard() {
+    return (
       <Card>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-950">Initial Documents</h2>
             <p className="mt-1 text-sm text-zinc-600">
-              Attach shipment documents now, then review any autofill suggestions before applying them.
+              Upload source documents first so the form can suggest shipment fields before manual entry.
             </p>
           </div>
           <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
@@ -659,6 +494,182 @@ export function CreateShipmentForm() {
                 {item}
               </label>
             ))}
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <form
+      ref={formRef}
+      className="space-y-5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submitShipment("created");
+      }}
+    >
+      {saveState !== "idle" && (
+        <Card
+          className={
+            saveState === "created"
+              ? "border-emerald-200 bg-emerald-50"
+              : saveState === "error"
+                ? "border-rose-200 bg-rose-50"
+                : "border-sky-200 bg-sky-50"
+          }
+        >
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-700">
+                {saveState === "saving"
+                  ? "Saving shipment"
+                  : saveState === "created"
+                    ? "Shipment created in Supabase"
+                    : saveState === "error"
+                      ? "Shipment was not saved"
+                      : "Draft saved in Supabase"}
+              </p>
+              <h2 className="mt-2 text-xl font-semibold text-slate-950">
+                {createdShipment?.reference || "Working..."}
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-zinc-700">
+                {saveState === "saving"
+                  ? "Writing the shipment, cargo, timeline, and document metadata to the database."
+                  : saveState === "error"
+                    ? errorMessage
+                    : "The MVP wrote this shipment to Supabase. It will appear on the dashboard and shipment board for every user."}
+              </p>
+            </div>
+            {createdShipment && (
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href={`/shipments/${createdShipment.id}`}
+                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  View created shipment
+                </Link>
+                <Link
+                  href="/shipments"
+                  className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-slate-950"
+                >
+                  View shipment board
+                </Link>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      <Card>
+        <h2 className="text-lg font-semibold text-slate-950">Shipment Reference</h2>
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          <div>
+            <TextInput
+              label="Shipment reference"
+              name="shipmentReference"
+              value={shipmentReference}
+              onChange={(event) => setShipmentReference(event.target.value)}
+            />
+            <p className="mt-1 text-xs text-zinc-500">
+              {referenceState === "loading"
+                ? "Checking latest Supabase shipment reference..."
+                : referenceState === "ready"
+                  ? "Auto-filled from the latest Supabase shipment reference."
+                  : "Using fallback reference; duplicate protection still runs on save."}
+            </p>
+          </div>
+          <TextInput label="Carrier / shipping line" name="carrier" placeholder="e.g. Maersk" />
+          <TextInput label="Booking number" name="bookingNumber" placeholder="Optional" />
+        </div>
+      </Card>
+
+      {renderInitialDocumentsCard()}
+
+      <Card>
+        <h2 className="text-lg font-semibold text-slate-950">Parties</h2>
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          <TextInput label="Shipper name" name="shipperName" placeholder="Exporter or shipper" required />
+          <TextInput label="Consignee name" name="consigneeName" placeholder="Buyer or consignee" required />
+          <TextInput label="Notify party" name="notifyParty" placeholder="Notify party" />
+        </div>
+      </Card>
+
+      <Card>
+        <h2 className="text-lg font-semibold text-slate-950">Cargo Details</h2>
+        <div className="mt-5 grid gap-4 md:grid-cols-4">
+          <div className="md:col-span-2">
+            <TextInput label="Cargo description" name="cargoDescription" placeholder="Describe cargo clearly" required />
+          </div>
+          <TextInput label="Item type" name="itemType" placeholder="Electronics, DG, reefer..." />
+          <TextInput label="HS code" name="hsCode" placeholder="e.g. 8517.62" />
+          <label className="block">
+            <span className="text-sm font-medium text-slate-800">Package count</span>
+            <input
+              name="packageCount"
+              value={packages}
+              onChange={(event) => setPackages(event.target.value)}
+              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-800">Length (cm)</span>
+            <input
+              name="lengthCm"
+              value={length}
+              onChange={(event) => setLength(event.target.value)}
+              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-800">Width (cm)</span>
+            <input
+              name="widthCm"
+              value={width}
+              onChange={(event) => setWidth(event.target.value)}
+              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-slate-800">Height (cm)</span>
+            <input
+              name="heightCm"
+              value={height}
+              onChange={(event) => setHeight(event.target.value)}
+              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+            />
+          </label>
+          <TextInput label="Gross weight (kg)" name="grossWeightKg" placeholder="0.00" />
+          <TextInput label="Net weight (kg)" name="netWeightKg" placeholder="0.00" />
+          <div className="rounded-lg border border-sky-100 bg-sky-50 p-4 md:col-span-2">
+            <p className="text-sm font-semibold text-sky-900">Calculated CBM</p>
+            <p className="mt-2 text-3xl font-semibold text-slate-950">{cbm}</p>
+            <p className="mt-1 text-xs text-zinc-600">Length x width x height x package count / 1,000,000</p>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <h2 className="text-lg font-semibold text-slate-950">Routing</h2>
+        <div className="mt-5 grid gap-4 md:grid-cols-4">
+          <SelectField label="Incoterm" name="incoterm" options={["FOB", "CIF", "CFR", "DAP", "EXW", "DDP"]} />
+          <TextInput label="Origin" name="origin" placeholder="Singapore" required />
+          <TextInput label="Destination" name="destination" placeholder="Rotterdam" required />
+          <SelectField name="containerType" label="Container type" options={["20GP", "40GP", "40HC", "40RF", "LCL"]} />
+          <TextInput label="POL" name="pol" placeholder="Port of loading" />
+          <TextInput label="POD" name="pod" placeholder="Port of discharge" />
+          <TextInput label="Preferred ETD" name="preferredEtd" type="date" />
+          <TextInput label="Preferred ETA" name="preferredEta" type="date" />
+        </div>
+      </Card>
+
+      <Card>
+        <h2 className="text-lg font-semibold text-slate-950">References and Notes</h2>
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          <TextInput label="B/L number" name="blNumber" placeholder="Optional" />
+          <TextInput label="Container number" name="containerNumber" placeholder="Optional" />
+          <div className="md:col-span-3">
+            <TextArea name="notes" label="Notes" placeholder="Add handling notes, compliance constraints, or buyer requests." />
           </div>
         </div>
       </Card>

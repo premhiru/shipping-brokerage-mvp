@@ -590,3 +590,20 @@ export function isTextExtractableDocument(fileName: string, mimeType: string) {
 export function isPdfDocument(fileName: string, mimeType: string) {
   return mimeType === "application/pdf" || fileName.toLowerCase().endsWith(".pdf");
 }
+
+export function isExcelDocument(fileName: string, mimeType: string) {
+  const extension = fileName.split(".").pop()?.toLowerCase();
+  return (
+    ["xlsx", "xlsm", "xltx", "xltm"].includes(extension ?? "") ||
+    [
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-excel.sheet.macroEnabled.12",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.template",
+      "application/vnd.ms-excel.template.macroEnabled.12",
+    ].includes(mimeType)
+  );
+}
+
+export function isLegacyExcelDocument(fileName: string, mimeType: string) {
+  return fileName.toLowerCase().endsWith(".xls") || mimeType === "application/vnd.ms-excel";
+}
