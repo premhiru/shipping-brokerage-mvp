@@ -9,7 +9,7 @@ import { isSupabaseAuthConfigured, sanitizeRedirectPath } from "@/lib/supabase-a
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ next?: string }>;
+  searchParams?: Promise<{ error?: string; next?: string }>;
 }) {
   const user = await getCurrentUser();
 
@@ -20,6 +20,18 @@ export default async function LoginPage({
   const params = await searchParams;
   const nextPath = sanitizeRedirectPath(params?.next);
   const authReady = isSupabaseAuthConfigured();
+  const authError = (() => {
+    switch (params?.error) {
+      case "invalid_invite_link":
+        return "This invitation link is invalid or expired. Please ask an admin to send a new invite.";
+      case "missing_auth_code":
+        return "The sign-in link is missing its verification code. Please open the latest invite email.";
+      case "auth_not_configured":
+        return "Supabase Auth is not configured for this deployment.";
+      default:
+        return "";
+    }
+  })();
 
   return (
     <main className="grid min-h-screen bg-zinc-50 px-4 py-8 text-slate-950 lg:grid-cols-[1fr_460px]">
@@ -55,6 +67,11 @@ export default async function LoginPage({
               </p>
             </div>
           </div>
+          {authError && (
+            <p className="mt-5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              {authError}
+            </p>
+          )}
           <LoginForm nextPath={nextPath} authReady={authReady} />
           <div className="mt-6 rounded-lg bg-zinc-50 p-4 text-sm leading-6 text-zinc-600">
             Access is controlled in Supabase Auth. Create or invite internal users from the Supabase dashboard,

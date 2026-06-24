@@ -32,7 +32,11 @@ function isActiveRoute(pathname: string, href: string) {
 
 export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) {
   const pathname = usePathname();
-  const isPortal = pathname.startsWith("/line/share") || pathname === "/login";
+  const isPortal =
+    pathname.startsWith("/line/share") ||
+    pathname.startsWith("/auth/") ||
+    pathname === "/login" ||
+    pathname === "/set-password";
 
   if (isPortal) {
     return <>{children}</>;
