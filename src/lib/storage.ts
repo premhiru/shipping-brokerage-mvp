@@ -32,15 +32,21 @@ export async function uploadShipmentDocument({
   file,
   shipmentId,
   documentId,
+  shareToken,
 }: {
   file: File;
   shipmentId: string;
   documentId: string;
+  shareToken?: string;
 }): Promise<StorageUploadResult> {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("shipmentId", shipmentId);
   formData.append("documentId", documentId);
+
+  if (shareToken) {
+    formData.append("shareToken", shareToken);
+  }
 
   const response = await fetch("/api/storage/upload", {
     method: "POST",

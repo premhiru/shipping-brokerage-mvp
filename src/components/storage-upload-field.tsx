@@ -11,11 +11,13 @@ export function StorageUploadField({
   shipmentId,
   documentId,
   label = "Upload file",
+  shareToken,
   onUploaded,
 }: {
   shipmentId: string;
   documentId: string;
   label?: string;
+  shareToken?: string;
   onUploaded?: (result: StorageUploadResult, file: File) => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
@@ -38,6 +40,7 @@ export function StorageUploadField({
         file,
         shipmentId,
         documentId,
+        shareToken,
       });
 
       setSignedUrl(result.signedUrl);

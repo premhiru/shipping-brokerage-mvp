@@ -155,6 +155,7 @@ export function CarrierShareClient({
                   key={documentId}
                   shipmentId={shipment.id}
                   documentId={documentId}
+                  shareToken={token}
                   label="File"
                   onUploaded={(result, file) => setUpload({ result, file })}
                 />

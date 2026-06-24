@@ -1,10 +1,25 @@
 import Link from "next/link";
 import { LockKeyhole } from "lucide-react";
-import { Card, TextInput } from "@/components/ui";
-import { demoAccounts } from "@/lib/demo-data";
+import { redirect } from "next/navigation";
+import { LoginForm } from "@/components/login-form";
+import { Card } from "@/components/ui";
+import { getCurrentUser } from "@/lib/supabase-auth-server";
+import { isSupabaseAuthConfigured, sanitizeRedirectPath } from "@/lib/supabase-auth-config";
 
-export default function LoginPage() {
-  const storageReady = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY);
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ next?: string }>;
+}) {
+  const user = await getCurrentUser();
+
+  if (user) {
+    redirect("/dashboard");
+  }
+
+  const params = await searchParams;
+  const nextPath = sanitizeRedirectPath(params?.next);
+  const authReady = isSupabaseAuthConfigured();
 
   return (
     <main className="grid min-h-screen bg-zinc-50 px-4 py-8 text-slate-950 lg:grid-cols-[1fr_460px]">
@@ -15,11 +30,14 @@ export default function LoginPage() {
             Shipping docs, carrier sharing, and B/L tracking in one secure workspace.
           </h1>
           <p className="mt-5 text-base leading-7 text-zinc-600">
-            This demo login is wired for Supabase email/password auth once project keys are connected. Until then,
-            reviewers can enter the dashboard directly.
+            Sign in with your HarborBridge operations account to manage shipments, documents, comments, carrier
+            updates, and workflow status.
           </p>
-          <Link href="/dashboard" className="mt-8 inline-flex rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white">
-            Continue to demo dashboard
+          <Link
+            href="/line/share/demo-share-electronics"
+            className="mt-8 inline-flex rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-slate-950"
+          >
+            View carrier portal
           </Link>
         </div>
       </section>
@@ -33,28 +51,14 @@ export default function LoginPage() {
             <div>
               <h2 className="text-xl font-semibold text-slate-950">Sign in</h2>
               <p className="text-sm text-zinc-600">
-                {storageReady ? "Server storage configured" : "Demo mode, server storage not connected"}
+                {authReady ? "Email/password auth enabled" : "Supabase Auth env vars missing"}
               </p>
             </div>
           </div>
-          <form className="mt-6 space-y-4">
-            <TextInput label="Email" type="email" placeholder="admin@harborbridge.demo" />
-            <TextInput label="Password" type="password" placeholder="DemoAdmin123!" />
-            <button type="button" className="w-full rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white">
-              Sign in
-            </button>
-          </form>
-          <div className="mt-6 rounded-lg bg-zinc-50 p-4">
-            <p className="text-sm font-semibold text-slate-950">Demo accounts</p>
-            <div className="mt-3 space-y-3">
-              {demoAccounts.map((account) => (
-                <div key={account.role} className="text-sm">
-                  <p className="font-medium text-slate-950">{account.role}</p>
-                  <p className="text-zinc-600">{account.email}</p>
-                  <p className="text-zinc-500">{account.password}</p>
-                </div>
-              ))}
-            </div>
+          <LoginForm nextPath={nextPath} authReady={authReady} />
+          <div className="mt-6 rounded-lg bg-zinc-50 p-4 text-sm leading-6 text-zinc-600">
+            Access is controlled in Supabase Auth. Create or invite internal users from the Supabase dashboard,
+            then they can sign in here with email and password.
           </div>
         </Card>
       </section>

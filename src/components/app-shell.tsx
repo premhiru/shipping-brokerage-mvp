@@ -11,6 +11,7 @@ import {
   Settings,
   Ship,
 } from "lucide-react";
+import { LogoutButton } from "@/components/logout-button";
 import { cn } from "@/lib/format";
 
 const navItems = [
@@ -73,10 +74,11 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
 
         <div className="absolute bottom-5 left-5 right-5 rounded-lg border border-sky-100 bg-sky-50 p-4">
           <FileText className="h-5 w-5 text-sky-700" />
-          <p className="mt-3 text-sm font-semibold text-slate-950">Demo mode active</p>
+          <p className="mt-3 text-sm font-semibold text-slate-950">Secure workspace</p>
           <p className="mt-1 text-xs leading-5 text-zinc-600">
-            Supabase-ready UI with seeded shipment data for client review.
+            Internal shipment tools are protected by Supabase email/password auth.
           </p>
+          <LogoutButton />
         </div>
       </aside>
 
