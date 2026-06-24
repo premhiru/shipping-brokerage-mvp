@@ -44,6 +44,7 @@ export type ShipmentDocument = {
   id: string;
   type: string;
   fileName: string;
+  storagePath?: string;
   uploadedBy: string;
   uploadedAt: string;
   status: DocumentStatus;

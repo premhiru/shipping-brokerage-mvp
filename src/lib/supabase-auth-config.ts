@@ -50,7 +50,7 @@ export function isPublicApiPath(pathname: string) {
 }
 
 export function isMixedAccessApiPath(pathname: string) {
-  return pathname === "/api/storage/upload";
+  return pathname === "/api/storage/upload" || pathname === "/api/storage/signed-url";
 }
 
 export function isProtectedApiPath(pathname: string) {

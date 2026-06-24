@@ -4,15 +4,13 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileUp, MessageSquareText, ShieldCheck } from "lucide-react";
+import { DocumentFileActions } from "@/components/document-file-actions";
 import { StorageUploadField } from "@/components/storage-upload-field";
 import { Badge, Card, PageHeader, SelectField, TextArea } from "@/components/ui";
 import { formatDate, formatDateTime } from "@/lib/format";
+import { displayFileNameFromPath } from "@/lib/storage";
 import type { StorageUploadResult } from "@/lib/storage";
 import type { ShareLink, Shipment } from "@/lib/types";
-
-function fileNameFromPath(path: string) {
-  return path.split("/").pop()?.replace(/^\d+-/, "") || "Attachment";
-}
 
 export function CarrierShareClient({
   shipment,
@@ -136,6 +134,15 @@ export function CarrierShareClient({
                   <div>
                     <p className="font-semibold text-slate-950">{document.type}</p>
                     <p className="mt-1 text-sm text-zinc-600">{document.fileName}</p>
+                    <div className="mt-3">
+                      <DocumentFileActions
+                        shipmentId={shipment.id}
+                        storagePath={document.storagePath}
+                        fileName={document.fileName}
+                        shareToken={token}
+                        compact
+                      />
+                    </div>
                   </div>
                   <Badge value={document.status} />
                 </div>
@@ -196,9 +203,18 @@ export function CarrierShareClient({
                 </div>
                 <p className="mt-2 text-sm leading-6 text-zinc-600">{comment.message}</p>
                 {comment.attachment && (
-                  <p className="mt-2 text-xs font-semibold text-sky-700">
-                    Attachment: {fileNameFromPath(comment.attachment)}
-                  </p>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <p className="text-xs font-semibold text-sky-700">
+                      Attachment: {displayFileNameFromPath(comment.attachment)}
+                    </p>
+                    <DocumentFileActions
+                      shipmentId={shipment.id}
+                      storagePath={comment.attachment}
+                      fileName={displayFileNameFromPath(comment.attachment)}
+                      shareToken={token}
+                      compact
+                    />
+                  </div>
                 )}
               </div>
             ))}

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Activity, FileWarning, MessageSquareText, Users } from "lucide-react";
+import { DocumentFileActions } from "@/components/document-file-actions";
 import { ShipmentTable } from "@/components/shipment-table";
 import { Badge, Card, PageHeader, StatCard } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
@@ -112,6 +113,14 @@ export function AdminClient({ shipments, feedback }: { shipments: Shipment[]; fe
                   <Badge value={document.status} />
                 </div>
                 <p className="mt-1 text-sm text-zinc-600">{shipment.reference} · {document.rejectionReason || "Needs admin review"}</p>
+                <div className="mt-3">
+                  <DocumentFileActions
+                    shipmentId={shipment.id}
+                    storagePath={document.storagePath}
+                    fileName={document.fileName}
+                    compact
+                  />
+                </div>
                 <div className="mt-3 flex gap-2">
                   <button
                     disabled={pendingId === document.id}

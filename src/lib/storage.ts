@@ -14,6 +14,10 @@ export function sanitizeFileName(fileName: string) {
     .toLowerCase();
 }
 
+export function displayFileNameFromPath(path: string) {
+  return path.split("/").pop()?.replace(/^\d+-/, "") || "Attachment";
+}
+
 export function buildShipmentDocumentPath({
   companyId = DEMO_COMPANY_ID,
   shipmentId,

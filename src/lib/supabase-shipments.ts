@@ -76,6 +76,7 @@ type SupabaseDocumentRow = {
   id: string;
   document_type: string;
   file_name: string;
+  storage_path: string | null;
   uploaded_by_name: string | null;
   uploaded_at: string | null;
   status: DocumentStatus;
@@ -170,6 +171,7 @@ function mapDocument(row: SupabaseDocumentRow): ShipmentDocument {
     id: row.id,
     type: documentTypeLabels[row.document_type] ?? "Other",
     fileName: row.file_name,
+    storagePath: row.storage_path ?? undefined,
     uploadedBy: row.uploaded_by_name ?? "Not uploaded",
     uploadedAt: row.uploaded_at ?? "",
     status: row.status,

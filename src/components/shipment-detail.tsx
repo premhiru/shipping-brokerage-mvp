@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { DocumentFileActions } from "@/components/document-file-actions";
 import { ShipmentStatusCard } from "@/components/shipment-status-card";
 import { Badge, Card, EmptyState, Field } from "@/components/ui";
 import { documentTypes, milestoneCatalog } from "@/lib/demo-data";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
+import { displayFileNameFromPath } from "@/lib/storage";
 import type { Shipment } from "@/lib/types";
 
 export const shipmentTabs = [
@@ -15,10 +17,6 @@ export const shipmentTabs = [
   ["Sharing", "#sharing"],
   ["Audit Log", "#audit"],
 ] as const;
-
-function fileNameFromPath(path: string) {
-  return path.split("/").pop()?.replace(/^\d+-/, "") || "Attachment";
-}
 
 export function ShipmentTabs({ shipment }: { shipment: Shipment }) {
   return (
@@ -126,11 +124,12 @@ export function DocumentsPanel({ shipment }: { shipment: Shipment }) {
         </Link>
       </div>
       <div className="mt-5 overflow-x-auto">
-        <table className="w-full min-w-[720px] text-left text-sm">
+        <table className="w-full min-w-[860px] text-left text-sm">
           <thead className="text-xs uppercase tracking-[0.12em] text-zinc-500">
             <tr>
               <th className="border-b border-zinc-200 py-2">Type</th>
               <th className="border-b border-zinc-200 py-2">File</th>
+              <th className="border-b border-zinc-200 py-2">Actions</th>
               <th className="border-b border-zinc-200 py-2">Uploaded by</th>
               <th className="border-b border-zinc-200 py-2">Status</th>
               <th className="border-b border-zinc-200 py-2">Review note</th>
@@ -141,6 +140,14 @@ export function DocumentsPanel({ shipment }: { shipment: Shipment }) {
               <tr key={document.id}>
                 <td className="py-3 font-medium text-slate-950">{document.type}</td>
                 <td className="py-3 text-zinc-600">{document.fileName}</td>
+                <td className="py-3">
+                  <DocumentFileActions
+                    shipmentId={shipment.id}
+                    storagePath={document.storagePath}
+                    fileName={document.fileName}
+                    compact
+                  />
+                </td>
                 <td className="py-3 text-zinc-600">{document.uploadedBy}</td>
                 <td className="py-3">
                   <Badge value={document.status} />
@@ -240,9 +247,17 @@ export function CommentsPanel({ shipment }: { shipment: Shipment }) {
             </div>
             <p className="mt-2 text-sm leading-6 text-zinc-600">{comment.message}</p>
             {comment.attachment && (
-              <p className="mt-2 text-xs font-semibold text-sky-700">
-                Attachment: {fileNameFromPath(comment.attachment)}
-              </p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                <p className="text-xs font-semibold text-sky-700">
+                  Attachment: {displayFileNameFromPath(comment.attachment)}
+                </p>
+                <DocumentFileActions
+                  shipmentId={shipment.id}
+                  storagePath={comment.attachment}
+                  fileName={displayFileNameFromPath(comment.attachment)}
+                  compact
+                />
+              </div>
             )}
           </div>
         ))}
