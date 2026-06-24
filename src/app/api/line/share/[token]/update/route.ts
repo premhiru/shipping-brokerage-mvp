@@ -16,6 +16,11 @@ function cleanString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function cleanNumber(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
   const supabase = createSupabaseServerClient();
 
@@ -29,7 +34,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     const uploadType = cleanString(input.uploadType) || "Other";
     const statusUpdate = cleanString(input.statusUpdate) || "Booking confirmed";
     const notes = cleanString(input.notes) || "Carrier submitted an update.";
-    const fileName = cleanString(input.fileName);
+    const upload = input.upload && typeof input.upload === "object"
+      ? (input.upload as Record<string, unknown>)
+      : {};
+    const fileName = cleanString(upload.fileName) || cleanString(input.fileName);
+    const storagePath = cleanString(upload.path);
+    const mimeType = cleanString(upload.mimeType) || null;
+    const fileSize = cleanNumber(upload.size);
 
     const tokenHash = createHash("sha256").update(token).digest("hex");
 
@@ -84,12 +95,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       throw new Error(shipmentUpdateError.message);
     }
 
-    if (fileName && shareLink.can_upload_documents) {
+    if (storagePath && !shareLink.can_upload_documents) {
+      return jsonError("This share link cannot upload documents.", 403);
+    }
+
+    if (storagePath && fileName) {
       const { error: documentError } = await supabase.from("documents").insert({
         company_id: DEMO_COMPANY_ID,
         shipment_id: shipmentId,
         document_type: documentLabelToValue(uploadType),
         file_name: fileName,
+        storage_path: storagePath,
+        mime_type: mimeType,
+        file_size_bytes: fileSize,
         uploaded_by_name: recipientName,
         uploaded_at: new Date().toISOString(),
         status: "uploaded",
@@ -120,7 +138,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       actor_name: recipientName,
       actor_role: "shipping_line_guest",
       action: "carrier_update_submitted",
-      metadata: { statusUpdate, uploadType, fileName, notes },
+      metadata: { statusUpdate, uploadType, fileName, storagePath, notes },
     });
 
     if (auditError) {

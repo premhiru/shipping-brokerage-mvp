@@ -16,6 +16,10 @@ export const shipmentTabs = [
   ["Audit Log", "#audit"],
 ] as const;
 
+function fileNameFromPath(path: string) {
+  return path.split("/").pop()?.replace(/^\d+-/, "") || "Attachment";
+}
+
 export function ShipmentTabs({ shipment }: { shipment: Shipment }) {
   return (
     <div className="flex gap-2 overflow-x-auto border-b border-zinc-200 py-3">
@@ -235,6 +239,11 @@ export function CommentsPanel({ shipment }: { shipment: Shipment }) {
               <span className="text-xs text-zinc-500">{formatDateTime(comment.timestamp)}</span>
             </div>
             <p className="mt-2 text-sm leading-6 text-zinc-600">{comment.message}</p>
+            {comment.attachment && (
+              <p className="mt-2 text-xs font-semibold text-sky-700">
+                Attachment: {fileNameFromPath(comment.attachment)}
+              </p>
+            )}
           </div>
         ))}
       </div>

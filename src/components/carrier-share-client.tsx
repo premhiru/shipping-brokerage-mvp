@@ -4,9 +4,15 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileUp, MessageSquareText, ShieldCheck } from "lucide-react";
-import { Badge, Card, PageHeader, SelectField, TextArea, TextInput } from "@/components/ui";
+import { StorageUploadField } from "@/components/storage-upload-field";
+import { Badge, Card, PageHeader, SelectField, TextArea } from "@/components/ui";
 import { formatDate, formatDateTime } from "@/lib/format";
+import type { StorageUploadResult } from "@/lib/storage";
 import type { ShareLink, Shipment } from "@/lib/types";
+
+function fileNameFromPath(path: string) {
+  return path.split("/").pop()?.replace(/^\d+-/, "") || "Attachment";
+}
 
 export function CarrierShareClient({
   shipment,
@@ -19,6 +25,8 @@ export function CarrierShareClient({
 }) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
+  const [documentId, setDocumentId] = useState(() => `carrier-upload-${Date.now()}`);
+  const [upload, setUpload] = useState<{ result: StorageUploadResult; file: File } | null>(null);
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [message, setMessage] = useState("");
 
@@ -31,7 +39,6 @@ export function CarrierShareClient({
 
     const formData = new FormData(formRef.current);
     const read = (name: string) => String(formData.get(name) ?? "").trim();
-    const file = formData.get("file");
 
     setState("saving");
     setMessage("");
@@ -42,7 +49,14 @@ export function CarrierShareClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           uploadType: read("uploadType"),
-          fileName: file instanceof File ? file.name : "",
+          upload: upload
+            ? {
+                path: upload.result.path,
+                fileName: upload.file.name,
+                mimeType: upload.file.type || "application/octet-stream",
+                size: upload.file.size,
+              }
+            : null,
           statusUpdate: read("statusUpdate"),
           notes: read("notes"),
         }),
@@ -54,8 +68,10 @@ export function CarrierShareClient({
       }
 
       formRef.current.reset();
+      setUpload(null);
+      setDocumentId(`carrier-upload-${Date.now()}`);
       setState("saved");
-      setMessage("Carrier update saved to Supabase.");
+      setMessage(upload ? "Carrier update and uploaded document saved to Supabase." : "Carrier update saved to Supabase.");
       router.refresh();
     } catch (error) {
       setState("error");
@@ -134,7 +150,19 @@ export function CarrierShareClient({
             </div>
             <form ref={formRef} onSubmit={submitCarrierUpdate} className="mt-5 space-y-4">
               <SelectField name="uploadType" label="Upload type" options={["Booking confirmation", "Draft B/L", "Final B/L / sea waybill", "Other"]} />
-              <TextInput name="file" label="File" type="file" />
+              {shareLink.canUploadDocuments ? (
+                <StorageUploadField
+                  key={documentId}
+                  shipmentId={shipment.id}
+                  documentId={documentId}
+                  label="File"
+                  onUploaded={(result, file) => setUpload({ result, file })}
+                />
+              ) : (
+                <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  This share link cannot upload documents.
+                </p>
+              )}
               <SelectField name="statusUpdate" label="Status update" options={["Booking confirmed", "Draft B/L issued", "Loaded on vessel", "Vessel sailed"]} />
               <TextArea name="notes" label="Notes" placeholder="Add carrier message for the broker." required />
               {message && (
@@ -166,6 +194,11 @@ export function CarrierShareClient({
                   <span className="text-xs text-zinc-500">{formatDateTime(comment.timestamp)}</span>
                 </div>
                 <p className="mt-2 text-sm leading-6 text-zinc-600">{comment.message}</p>
+                {comment.attachment && (
+                  <p className="mt-2 text-xs font-semibold text-sky-700">
+                    Attachment: {fileNameFromPath(comment.attachment)}
+                  </p>
+                )}
               </div>
             ))}
           </div>

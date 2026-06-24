@@ -24,6 +24,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const role = roles.has(cleanString(input.role)) ? (cleanString(input.role) as UserRole) : "admin";
     const message = cleanString(input.message);
     const attachmentStoragePath = cleanString(input.attachmentStoragePath);
+    const attachmentFileName = cleanString(input.attachmentFileName);
 
     if (!message) {
       return jsonError("Message is required.", 400);
@@ -42,14 +43,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       throw new Error(error.message);
     }
 
-    await supabase.from("audit_logs").insert({
+    const { error: auditError } = await supabase.from("audit_logs").insert({
       company_id: DEMO_COMPANY_ID,
       shipment_id: id,
       actor_name: userName,
       actor_role: role,
       action: "comment_added",
-      metadata: { messagePreview: message.slice(0, 120) },
+      metadata: {
+        messagePreview: message.slice(0, 120),
+        attachmentStoragePath: attachmentStoragePath || null,
+        attachmentFileName: attachmentFileName || null,
+      },
     });
+
+    if (auditError) {
+      throw new Error(auditError.message);
+    }
 
     return Response.json({ ok: true });
   } catch (error) {
