@@ -42,7 +42,7 @@ export function formatNumber(value: number, unit = "") {
 export function statusTone(
   status: ShipmentStatus | DocumentStatus | MilestoneStatus | UserRole | string,
 ) {
-  const green = ["approved", "accepted_by_line", "completed", "delivered", "closed", "admin"];
+  const green = ["approved", "accepted_by_line", "completed", "delivered", "closed", "admin", "live"];
   const blue = [
     "uploaded",
     "shared_with_line",
@@ -50,9 +50,10 @@ export function statusTone(
     "in_transit",
     "shipper",
     "shipping_line_guest",
+    "configured",
   ];
-  const amber = ["draft", "docs_pending", "docs_review", "in_progress", "needs_review", "processing"];
-  const red = ["rejected", "blocked", "delayed"];
+  const amber = ["draft", "docs_pending", "docs_review", "in_progress", "needs_review", "processing", "stale"];
+  const red = ["rejected", "blocked", "delayed", "error"];
 
   if (green.includes(status)) return "green";
   if (blue.includes(status)) return "blue";

@@ -1,6 +1,10 @@
 export type AutofillField =
   | "carrier"
   | "bookingNumber"
+  | "vesselName"
+  | "voyageNumber"
+  | "imo"
+  | "mmsi"
   | "shipperName"
   | "consigneeName"
   | "notifyParty"
@@ -51,6 +55,30 @@ const FIELD_SPECS: FieldSpec[] = [
     field: "bookingNumber",
     label: "Booking number",
     labels: ["booking number", "booking no", "booking ref", "booking reference"],
+  },
+  {
+    field: "vesselName",
+    label: "Vessel name",
+    labels: ["vessel", "vessel name", "ocean vessel", "vessel / voyage", "vessel/voyage"],
+    transform: cleanVesselName,
+  },
+  {
+    field: "voyageNumber",
+    label: "Voyage number",
+    labels: ["voyage", "voyage number", "voyage no", "voy no", "vessel / voyage", "vessel/voyage"],
+    transform: cleanVoyageNumber,
+  },
+  {
+    field: "imo",
+    label: "IMO",
+    labels: ["imo", "imo number", "imo no"],
+    transform: cleanImo,
+  },
+  {
+    field: "mmsi",
+    label: "MMSI",
+    labels: ["mmsi", "mmsi number", "mmsi no"],
+    transform: cleanMmsi,
   },
   {
     field: "shipperName",
@@ -235,6 +263,35 @@ function cleanContainerType(value: string) {
   }
 
   return "";
+}
+
+function cleanVesselName(value: string) {
+  return cleanValue(value)
+    .replace(/\bVOY(?:AGE)?\.?\s*[:#-]?\s*[A-Z0-9-]+.*$/i, "")
+    .replace(/\bIMO\s*[:#-]?\s*\d{7}.*$/i, "")
+    .trim();
+}
+
+function cleanVoyageNumber(value: string) {
+  const cleaned = cleanValue(value);
+  const labeledMatch = cleaned.match(/\bVOY(?:AGE)?\.?\s*[:#-]?\s*([A-Z0-9-]{2,10})\b/i);
+
+  if (labeledMatch) {
+    return labeledMatch[1].toUpperCase();
+  }
+
+  const match = cleaned.match(/\b([A-Z]{0,4}\d{2,6}[A-Z]?)\b/i);
+  return match?.[1]?.toUpperCase() ?? "";
+}
+
+function cleanImo(value: string) {
+  const match = value.match(/\b(?:IMO\s*)?(\d{7})\b/i);
+  return match?.[1] ?? "";
+}
+
+function cleanMmsi(value: string) {
+  const match = value.match(/\b(\d{9})\b/);
+  return match?.[1] ?? "";
 }
 
 function cleanIsoDate(value: string) {
@@ -508,6 +565,20 @@ function addBillOfLadingSuggestions(
     carrierLine?.replace(/.*as agent for the carrier\s+/i, "") || lines[0] || "",
     sourceFileName,
   );
+
+  const vesselLine = lines.find((line) => /\bvessel\b/i.test(line) && /[A-Za-z]/.test(line));
+  const vesselVoyageLine = lines.find((line) => /\bvessel\s*\/?\s*voyage\b/i.test(line));
+  const nextVesselValue = vesselVoyageLine
+    ? lines[lines.indexOf(vesselVoyageLine) + 1] ?? ""
+    : "";
+  const vesselSource = nextVesselValue || vesselLine || "";
+  addSuggestion(suggestions, seenFields, "vesselName", cleanVesselName(vesselSource), sourceFileName);
+  addSuggestion(suggestions, seenFields, "voyageNumber", cleanVoyageNumber(vesselSource), sourceFileName);
+
+  const imoLine = lines.find((line) => /\bIMO\b/i.test(line));
+  const mmsiLine = lines.find((line) => /\bMMSI\b/i.test(line));
+  addSuggestion(suggestions, seenFields, "imo", cleanImo(imoLine ?? ""), sourceFileName);
+  addSuggestion(suggestions, seenFields, "mmsi", cleanMmsi(mmsiLine ?? ""), sourceFileName);
 
   const routeHeaderIndex = findLineIndex(lines, /place of receipt\s+port of loading\s+port of discharge\s+final destination/i);
   const routeValues = routeHeaderIndex === -1 ? null : extractRouteValues(lines[routeHeaderIndex + 1] ?? "");

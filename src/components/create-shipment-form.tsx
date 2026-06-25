@@ -272,6 +272,10 @@ export function CreateShipmentForm() {
           shipmentReference: read("shipmentReference"),
           carrier: read("carrier"),
           bookingNumber: read("bookingNumber"),
+          vesselName: read("vesselName"),
+          voyageNumber: read("voyageNumber"),
+          imo: read("imo"),
+          mmsi: read("mmsi"),
           shipperName: read("shipperName"),
           consigneeName: read("consigneeName"),
           notifyParty: read("notifyParty"),
@@ -585,6 +589,19 @@ export function CreateShipmentForm() {
       </Card>
 
       {renderInitialDocumentsCard()}
+
+      <Card>
+        <h2 className="text-lg font-semibold text-slate-950">Vessel Tracking</h2>
+        <p className="mt-1 text-sm text-zinc-600">
+          Optional now, but needed for AISStream refresh once the MMSI is known.
+        </p>
+        <div className="mt-5 grid gap-4 md:grid-cols-4">
+          <TextInput label="Vessel name" name="vesselName" placeholder="e.g. MAERSK HANOI" />
+          <TextInput label="Voyage number" name="voyageNumber" placeholder="e.g. 426W" />
+          <TextInput label="IMO" name="imo" placeholder="7 digits" inputMode="numeric" />
+          <TextInput label="MMSI" name="mmsi" placeholder="9 digits for AISStream" inputMode="numeric" />
+        </div>
+      </Card>
 
       <Card>
         <h2 className="text-lg font-semibold text-slate-950">Parties</h2>

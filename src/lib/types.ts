@@ -85,6 +85,27 @@ export type BillOfLading = {
   notes: string;
 };
 
+export type VesselTrackingStatus = "not_configured" | "configured" | "live" | "stale" | "error";
+
+export type VesselTracking = {
+  vesselName?: string;
+  voyageNumber?: string;
+  imo?: string;
+  mmsi?: string;
+  latitude?: number;
+  longitude?: number;
+  speedKnots?: number;
+  courseDegrees?: number;
+  headingDegrees?: number;
+  navigationalStatus?: string;
+  destination?: string;
+  aisTimestamp?: string;
+  provider: string;
+  lastRefreshAttemptAt?: string;
+  lastRefreshStatus: VesselTrackingStatus;
+  lastRefreshError?: string;
+};
+
 export type ShareLink = {
   token: string;
   recipientCompany: string;
@@ -135,6 +156,7 @@ export type Shipment = {
   comments: Comment[];
   auditLogs: AuditLog[];
   billOfLading?: BillOfLading;
+  vesselTracking?: VesselTracking;
   shareLinks: ShareLink[];
 };
 

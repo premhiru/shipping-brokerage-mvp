@@ -9,6 +9,7 @@ import type { Shipment } from "@/lib/types";
 
 export const shipmentTabs = [
   ["Overview", ""],
+  ["Vessel", "#vessel"],
   ["Cargo Details", "#cargo"],
   ["Documents", "#documents"],
   ["Timeline", "#timeline"],
