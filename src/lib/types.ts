@@ -85,7 +85,7 @@ export type BillOfLading = {
   notes: string;
 };
 
-export type VesselTrackingStatus = "not_configured" | "configured" | "live" | "stale" | "error";
+export type VesselTrackingStatus = "not_configured" | "configured" | "live" | "stale" | "no_signal" | "error";
 
 export type VesselTracking = {
   vesselName?: string;

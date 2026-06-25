@@ -52,7 +52,7 @@ export function statusTone(
     "shipping_line_guest",
     "configured",
   ];
-  const amber = ["draft", "docs_pending", "docs_review", "in_progress", "needs_review", "processing", "stale"];
+  const amber = ["draft", "docs_pending", "docs_review", "in_progress", "needs_review", "processing", "stale", "no_signal"];
   const red = ["rejected", "blocked", "delayed", "error"];
 
   if (green.includes(status)) return "green";

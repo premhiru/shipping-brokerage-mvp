@@ -253,8 +253,8 @@ function optionalNumber(value: string | number | null | undefined) {
 }
 
 function deriveVesselTrackingStatus(row: SupabaseVesselTrackingRow): VesselTrackingStatus {
-  if (row.last_refresh_status === "error") {
-    return "error";
+  if (row.last_refresh_status === "error" || row.last_refresh_status === "no_signal") {
+    return row.last_refresh_status;
   }
 
   if (!row.mmsi) {

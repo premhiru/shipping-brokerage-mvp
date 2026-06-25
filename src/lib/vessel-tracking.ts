@@ -24,6 +24,15 @@ type VesselTrackingRow = {
   last_refresh_error: string | null;
 };
 
+type ShipmentForTracking = {
+  id: string;
+  shipment_reference: string;
+  origin: string | null;
+  destination: string | null;
+  pol: string | null;
+  pod: string | null;
+};
+
 type AisSnapshot = {
   vesselName?: string;
   mmsi: string;
@@ -38,7 +47,47 @@ type AisSnapshot = {
   rawPayload: Record<string, unknown>;
 };
 
+type BoundingBox = [[number, number], [number, number]];
+
 const AISSTREAM_URL = "wss://stream.aisstream.io/v0/stream";
+
+class NoAisPositionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NoAisPositionError";
+  }
+}
+
+const AIS_ROUTE_BOXES: Array<{ patterns: RegExp[]; box: BoundingBox }> = [
+  {
+    patterns: [/singapore/i],
+    box: [[1.0, 103.4], [1.6, 104.2]],
+  },
+  {
+    patterns: [/rotterdam/i],
+    box: [[51.7, 3.6], [52.2, 4.7]],
+  },
+  {
+    patterns: [/los angeles|long beach/i],
+    box: [[33.5, -118.6], [34.1, -117.8]],
+  },
+  {
+    patterns: [/tokyo/i],
+    box: [[35.2, 139.4], [35.9, 140.2]],
+  },
+  {
+    patterns: [/jebel ali|dubai/i],
+    box: [[24.8, 54.7], [25.5, 55.5]],
+  },
+  {
+    patterns: [/laem chabang/i],
+    box: [[12.9, 100.6], [13.3, 101.1]],
+  },
+  {
+    patterns: [/cat lai|ho chi minh|saigon/i],
+    box: [[10.4, 106.3], [11.0, 107.0]],
+  },
+];
 
 function cleanString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -69,7 +118,7 @@ function requiredNumber(value: unknown) {
 }
 
 function cleanStatus(value: string | null | undefined): VesselTrackingStatus {
-  if (value === "configured" || value === "live" || value === "stale" || value === "error") {
+  if (value === "configured" || value === "live" || value === "stale" || value === "no_signal" || value === "error") {
     return value;
   }
 
@@ -100,7 +149,7 @@ export function mapVesselTrackingRow(row: VesselTrackingRow): VesselTracking {
 async function getShipmentForUpdate(supabase: SupabaseClient, shipmentId: string) {
   const { data, error } = await supabase
     .from("shipments")
-    .select("id, shipment_reference")
+    .select("id, shipment_reference, origin, destination, pol, pod")
     .eq("company_id", DEMO_COMPANY_ID)
     .eq("id", shipmentId)
     .maybeSingle();
@@ -109,7 +158,7 @@ async function getShipmentForUpdate(supabase: SupabaseClient, shipmentId: string
     throw new Error(error.message);
   }
 
-  return data as { id: string; shipment_reference: string } | null;
+  return data as ShipmentForTracking | null;
 }
 
 export async function upsertVesselTrackingConfig({
@@ -228,7 +277,36 @@ function readDestination(payload: Record<string, unknown>) {
   return cleanString(staticData.Destination);
 }
 
-async function fetchAisStreamSnapshot(mmsi: string): Promise<AisSnapshot> {
+function routeBoxesForShipment(shipment: ShipmentForTracking): BoundingBox[] {
+  const routeText = [shipment.origin, shipment.destination, shipment.pol, shipment.pod].filter(Boolean).join(" ");
+  const boxes = AIS_ROUTE_BOXES
+    .filter((item) => item.patterns.some((pattern) => pattern.test(routeText)))
+    .map((item) => item.box);
+  const seen = new Set<string>();
+
+  return boxes.filter((box) => {
+    const key = JSON.stringify(box);
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
+async function subscribeForAisSnapshot({
+  mmsi,
+  boundingBoxes,
+  useMmsiFilter,
+  timeoutMs,
+}: {
+  mmsi: string;
+  boundingBoxes: BoundingBox[];
+  useMmsiFilter: boolean;
+  timeoutMs: number;
+}): Promise<AisSnapshot> {
   const apiKey = process.env.AISSTREAM_API_KEY;
 
   if (!apiKey) {
@@ -252,15 +330,15 @@ async function fetchAisStreamSnapshot(mmsi: string): Promise<AisSnapshot> {
     };
 
     const timeout = setTimeout(() => {
-      finish(() => reject(new Error("AISStream did not return a position for this MMSI within 15 seconds.")));
-    }, 15000);
+      finish(() => reject(new NoAisPositionError(`AISStream did not broadcast MMSI ${mmsi} within ${Math.round(timeoutMs / 1000)} seconds.`)));
+    }, timeoutMs);
 
     ws.on("open", () => {
       ws.send(
         JSON.stringify({
           APIKey: apiKey,
-          BoundingBoxes: [[[-90, -180], [90, 180]]],
-          FiltersShipMMSI: [mmsi],
+          BoundingBoxes: boundingBoxes,
+          ...(useMmsiFilter ? { FiltersShipMMSI: [mmsi] } : {}),
           FilterMessageTypes: ["PositionReport", "ShipStaticData"],
         }),
       );
@@ -283,6 +361,36 @@ async function fetchAisStreamSnapshot(mmsi: string): Promise<AisSnapshot> {
     ws.on("error", (error) => {
       finish(() => reject(error));
     });
+  });
+}
+
+async function fetchAisStreamSnapshot(mmsi: string, shipment: ShipmentForTracking): Promise<AisSnapshot> {
+  const apiKey = process.env.AISSTREAM_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("AISSTREAM_API_KEY is missing. Add it to local and Vercel environment variables.");
+  }
+
+  const routeBoxes = routeBoxesForShipment(shipment);
+
+  try {
+    return await subscribeForAisSnapshot({
+      mmsi,
+      boundingBoxes: [[[-90, -180], [90, 180]]],
+      useMmsiFilter: true,
+      timeoutMs: 10000,
+    });
+  } catch (error) {
+    if (!(error instanceof NoAisPositionError) || routeBoxes.length === 0) {
+      throw error;
+    }
+  }
+
+  return subscribeForAisSnapshot({
+    mmsi,
+    boundingBoxes: routeBoxes,
+    useMmsiFilter: false,
+    timeoutMs: 25000,
   });
 }
 
@@ -319,7 +427,7 @@ export async function refreshVesselTracking(shipmentId: string) {
   }
 
   try {
-    const snapshot = await fetchAisStreamSnapshot(mmsi);
+    const snapshot = await fetchAisStreamSnapshot(mmsi, shipment);
     const { data, error } = await supabase
       .from("vessel_tracking")
       .upsert(
@@ -374,7 +482,8 @@ export async function refreshVesselTracking(shipmentId: string) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to refresh AIS position.";
 
-    await supabase
+    const status = error instanceof NoAisPositionError ? "no_signal" : "error";
+    const { data, error: updateError } = await supabase
       .from("vessel_tracking")
       .upsert(
         {
@@ -385,11 +494,21 @@ export async function refreshVesselTracking(shipmentId: string) {
           imo: current?.imo ?? null,
           mmsi,
           last_refresh_attempt_at: attemptedAt,
-          last_refresh_status: "error",
+          last_refresh_status: status,
           last_refresh_error: message,
         },
         { onConflict: "company_id,shipment_id" },
-      );
+      )
+      .select("*")
+      .single();
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+
+    if (error instanceof NoAisPositionError) {
+      return mapVesselTrackingRow(data as VesselTrackingRow);
+    }
 
     throw new Error(message);
   }

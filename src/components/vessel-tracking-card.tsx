@@ -91,7 +91,7 @@ export function VesselTrackingCard({ shipment }: { shipment: Shipment }) {
     startTransition(async () => {
       try {
         await callTrackingApi("POST");
-        setMessage("AIS position refreshed.");
+        setMessage("AIS refresh completed.");
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Unable to refresh AIS position.");
       }
@@ -188,9 +188,14 @@ export function VesselTrackingCard({ shipment }: { shipment: Shipment }) {
             <Field label="Last AIS update" value={formatDateTime(tracking?.aisTimestamp)} />
           </div>
 
-          {tracking?.lastRefreshError && (
+          {tracking?.lastRefreshError && tracking.lastRefreshStatus === "error" && (
             <p className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
               {tracking.lastRefreshError}
+            </p>
+          )}
+          {tracking?.lastRefreshStatus === "no_signal" && (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+              MMSI is saved, but AISStream has not broadcast this vessel in the checked route areas yet.
             </p>
           )}
         </div>
