@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { AlertTriangle, ClipboardList, Clock, FileCheck2, Ship } from "lucide-react";
 import { ShipmentTable } from "@/components/shipment-table";
 import { Badge, ButtonLink, Card, PageHeader, StatCard } from "@/components/ui";
@@ -57,9 +58,27 @@ export function DashboardClient() {
   const blocked = allShipments.filter(
     (shipment) => shipment.documentStatus === "needs_review" || shipment.status === "delayed",
   );
+  const documentBlockers = blocked.filter((shipment) => shipment.documentStatus === "needs_review");
   const active = allShipments.filter((shipment) => !["closed", "delivered"].includes(shipment.status));
   const shared = allShipments.filter((shipment) => shipment.shareLinks.length > 0);
   const persistedCreated = allShipments.find((shipment) => shipment.reference >= "HB-2026-0005");
+  const attentionQueue = blocked.map((shipment) => {
+    const needsDocumentReview = shipment.documentStatus === "needs_review";
+    const isDelayed = shipment.status === "delayed";
+
+    return {
+      shipment,
+      reasons: [
+        ...(needsDocumentReview ? ["Documents need review"] : []),
+        ...(isDelayed ? ["Shipment delayed"] : []),
+      ],
+      primaryAction: isDelayed ? "Update status" : "Review documents",
+      primaryHref: isDelayed ? `/shipments/${shipment.id}` : "/admin",
+      guidance: isDelayed
+        ? "Open the shipment and move it out of Delayed once the blocker is resolved."
+        : "Approve or reject the pending document from the admin review queue.",
+    };
+  });
 
   return (
     <div className="space-y-6">
@@ -89,9 +108,74 @@ export function DashboardClient() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Active shipments" value={active.length} helper={`Across ${allShipments.length} demo records`} />
         <StatCard label="Shared with lines" value={shared.length} helper="Scoped carrier portals active" />
-        <StatCard label="Needs attention" value={blocked.length} helper="Documents or milestones blocked" />
+        <a
+          href="#attention-queue"
+          className="rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-sm transition hover:border-amber-300 hover:bg-amber-100"
+        >
+          <p className="text-sm font-medium text-amber-800">Needs attention</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-950">{blocked.length}</p>
+          <p className="mt-1 text-xs text-amber-800">Open the attention queue</p>
+        </a>
         <StatCard label="B/L in progress" value="2" helper="Draft or final records tracked" />
       </div>
+
+      <Card id="attention-queue" className="border-amber-200">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-1 h-5 w-5 text-amber-600" />
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950">Attention queue</h2>
+              <p className="text-sm text-zinc-600">Clear these items by reviewing documents or updating delayed shipments.</p>
+            </div>
+          </div>
+          <ButtonLink href="/admin" variant="secondary">Open admin review</ButtonLink>
+        </div>
+        <div className="mt-5 space-y-3">
+          {attentionQueue.length === 0 && (
+            <p className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-600">
+              Nothing needs attention right now.
+            </p>
+          )}
+          {attentionQueue.map(({ shipment, reasons, primaryAction, primaryHref, guidance }) => (
+            <div key={shipment.id} className="rounded-lg border border-zinc-200 bg-white p-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold text-slate-950">{shipment.reference}</p>
+                    {reasons.map((reason) => (
+                      <Badge key={reason} value={reason} />
+                    ))}
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-zinc-600">{guidance}</p>
+                  <p className="mt-1 text-sm text-zinc-500">{shipment.nextAction}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    href={primaryHref}
+                    className="inline-flex items-center justify-center rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                  >
+                    {primaryAction}
+                  </Link>
+                  <Link
+                    href={`/shipments/${shipment.id}`}
+                    className="inline-flex items-center justify-center rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-50"
+                  >
+                    Open shipment
+                  </Link>
+                  {shipment.documentStatus === "needs_review" && (
+                    <Link
+                      href={`/shipments/${shipment.id}/documents`}
+                      className="inline-flex items-center justify-center rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-50"
+                    >
+                      Documents
+                    </Link>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
         <Card>
@@ -176,12 +260,14 @@ export function DashboardClient() {
             <FileCheck2 className="h-5 w-5 text-emerald-600" />
             <div>
               <h2 className="text-lg font-semibold text-slate-950">Document focus</h2>
-              <p className="text-sm text-zinc-600">Shipments that need review.</p>
+              <p className="text-sm text-zinc-600">Documents currently blocking shipments.</p>
             </div>
           </div>
           <div className="mt-5 space-y-4">
-            {blocked.length === 0 && <p className="text-sm text-zinc-600">No document blockers right now.</p>}
-            {blocked.slice(0, 5).map((shipment) => (
+            {documentBlockers.length === 0 && (
+              <p className="text-sm text-zinc-600">No document blockers right now.</p>
+            )}
+            {documentBlockers.slice(0, 5).map((shipment) => (
               <div key={shipment.id}>
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold text-slate-950">{shipment.reference}</p>
