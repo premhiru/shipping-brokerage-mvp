@@ -13,6 +13,10 @@ export function DashboardClient() {
   const [allShipments, setAllShipments] = useState<Shipment[]>(seedShipments);
   const [dashboardNotifications, setDashboardNotifications] = useState<Notification[]>(seedNotifications);
   const [assignedTasks, setAssignedTasks] = useState<TaskAssignment[]>([]);
+  const [showCompletedTasks, setShowCompletedTasks] = useState(false);
+  const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
+  const [pendingNotificationId, setPendingNotificationId] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const refresh = async () => {
@@ -55,10 +59,96 @@ export function DashboardClient() {
     };
   }, []);
 
+  async function updateTaskStatus(taskId: string, status: TaskAssignment["status"]) {
+    setPendingTaskId(taskId);
+    setActionMessage(null);
+
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const payload = (await response.json()) as { task?: TaskAssignment; error?: string };
+
+      if (!response.ok || !payload.task) {
+        throw new Error(payload.error ?? "Unable to update task.");
+      }
+
+      setAssignedTasks((current) =>
+        current.map((task) => (task.id === taskId ? payload.task as TaskAssignment : task)),
+      );
+      setActionMessage(status === "done" ? "Task marked done." : "Task reopened.");
+      window.dispatchEvent(new Event("harborbridge:shipments-changed"));
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to update task.");
+    } finally {
+      setPendingTaskId(null);
+    }
+  }
+
+  async function updateNotificationReadState(notificationId: string, isRead: boolean) {
+    setPendingNotificationId(notificationId);
+    setActionMessage(null);
+
+    try {
+      const response = await fetch(`/api/notifications/${notificationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isRead }),
+      });
+      const payload = (await response.json()) as { notification?: Notification; error?: string };
+
+      if (!response.ok || !payload.notification) {
+        throw new Error(payload.error ?? "Unable to update notification.");
+      }
+
+      setDashboardNotifications((current) =>
+        current.map((notification) =>
+          notification.id === notificationId ? payload.notification as Notification : notification,
+        ),
+      );
+      setActionMessage(isRead ? "Notification marked read." : "Notification marked unread.");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to update notification.");
+    } finally {
+      setPendingNotificationId(null);
+    }
+  }
+
+  async function markAllNotificationsRead() {
+    setPendingNotificationId("all");
+    setActionMessage(null);
+
+    try {
+      const response = await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isRead: true }),
+      });
+      const payload = (await response.json()) as { notifications?: Notification[]; error?: string };
+
+      if (!response.ok || !payload.notifications) {
+        throw new Error(payload.error ?? "Unable to update notifications.");
+      }
+
+      setDashboardNotifications(payload.notifications);
+      setActionMessage("All notifications marked read.");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to update notifications.");
+    } finally {
+      setPendingNotificationId(null);
+    }
+  }
+
   const hasDocumentBlocker = (shipment: Shipment) =>
     shipment.documents.some((document) => document.status === "needs_review" || document.status === "rejected");
   const blocked = allShipments.filter((shipment) => hasDocumentBlocker(shipment) || shipment.status === "delayed");
   const documentBlockers = blocked.filter(hasDocumentBlocker);
+  const openTasks = assignedTasks.filter((task) => task.status === "open");
+  const completedTasks = assignedTasks.filter((task) => task.status === "done");
+  const visibleTasks = showCompletedTasks ? assignedTasks : openTasks;
+  const unreadNotifications = dashboardNotifications.filter((notification) => !notification.isRead);
   const active = allShipments.filter((shipment) => !["closed", "delivered"].includes(shipment.status));
   const shared = allShipments.filter((shipment) => shipment.shareLinks.length > 0);
   const persistedCreated = allShipments.find((shipment) => shipment.reference >= "HB-2026-0005");
@@ -118,6 +208,12 @@ export function DashboardClient() {
         </a>
         <StatCard label="B/L in progress" value="2" helper="Draft or final records tracked" />
       </div>
+
+      {actionMessage && (
+        <p className="rounded-lg border border-zinc-200 bg-white p-3 text-sm font-medium text-zinc-700">
+          {actionMessage}
+        </p>
+      )}
 
       <Card id="attention-queue" className="border-amber-200">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -200,26 +296,52 @@ export function DashboardClient() {
         </Card>
 
         <Card>
-          <div className="flex items-center gap-3">
-            <ClipboardList className="h-5 w-5 text-emerald-700" />
-            <div>
-              <h2 className="text-lg font-semibold text-slate-950">Assigned tasks</h2>
-              <p className="text-sm text-zinc-600">Open work assigned from shipment records.</p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-center gap-3">
+              <ClipboardList className="h-5 w-5 text-emerald-700" />
+              <div>
+                <h2 className="text-lg font-semibold text-slate-950">Assigned tasks</h2>
+                <p className="text-sm text-zinc-600">
+                  {openTasks.length} open, {completedTasks.length} completed.
+                </p>
+              </div>
             </div>
+            {completedTasks.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowCompletedTasks((current) => !current)}
+                className="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-800 transition hover:bg-zinc-50"
+              >
+                {showCompletedTasks ? "Hide completed" : "Show completed"}
+              </button>
+            )}
           </div>
           <div className="mt-5 space-y-4">
-            {assignedTasks.length === 0 && <p className="text-sm text-zinc-600">No assigned tasks yet.</p>}
-            {assignedTasks.slice(0, 6).map((task) => (
-              <div key={task.id}>
+            {visibleTasks.length === 0 && (
+              <p className="text-sm text-zinc-600">
+                {completedTasks.length > 0 ? "No open tasks. Completed tasks are hidden." : "No assigned tasks yet."}
+              </p>
+            )}
+            {visibleTasks.slice(0, 6).map((task) => (
+              <div key={task.id} className={task.status === "done" ? "opacity-75" : undefined}>
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold text-slate-950">{task.shipmentReference}</p>
                   <Badge value={task.priority} />
+                  <Badge value={task.status} />
                 </div>
                 <p className="mt-1 text-sm leading-6 text-zinc-600">{task.task}</p>
                 <p className="mt-1 text-xs text-zinc-500">
                   {task.assignedTo}
                   {task.dueDate ? ` - due ${task.dueDate}` : ""} - {formatDateTime(task.createdAt)}
                 </p>
+                <button
+                  type="button"
+                  disabled={pendingTaskId === task.id}
+                  onClick={() => void updateTaskStatus(task.id, task.status === "done" ? "open" : "done")}
+                  className="mt-2 rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-800 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {task.status === "done" ? "Reopen" : "Mark done"}
+                </button>
               </div>
             ))}
           </div>
@@ -228,12 +350,24 @@ export function DashboardClient() {
 
       <div className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
         <Card>
-          <div className="flex items-center gap-3">
-            <Clock className="h-5 w-5 text-sky-700" />
-            <div>
-              <h2 className="text-lg font-semibold text-slate-950">Notifications</h2>
-              <p className="text-sm text-zinc-600">Live in-app alerts from shipment activity.</p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-center gap-3">
+              <Clock className="h-5 w-5 text-sky-700" />
+              <div>
+                <h2 className="text-lg font-semibold text-slate-950">Notifications</h2>
+                <p className="text-sm text-zinc-600">{unreadNotifications.length} unread in-app alerts.</p>
+              </div>
             </div>
+            {unreadNotifications.length > 0 && (
+              <button
+                type="button"
+                disabled={pendingNotificationId === "all"}
+                onClick={() => void markAllNotificationsRead()}
+                className="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-800 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Mark all read
+              </button>
+            )}
           </div>
           <div className="mt-5 space-y-4">
             {persistedCreated && (
@@ -246,10 +380,26 @@ export function DashboardClient() {
               </div>
             )}
             {dashboardNotifications.map((notification) => (
-              <div key={notification.id ?? `${notification.title}-${notification.createdAt}`}>
-                <p className="font-semibold text-slate-950">{notification.title}</p>
+              <div
+                key={notification.id ?? `${notification.title}-${notification.createdAt}`}
+                className={!notification.isRead ? "rounded-lg border border-sky-100 bg-sky-50 p-3" : undefined}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold text-slate-950">{notification.title}</p>
+                  {!notification.isRead && <Badge value="unread" />}
+                </div>
                 <p className="mt-1 text-sm leading-6 text-zinc-600">{notification.message}</p>
                 <p className="mt-1 text-xs text-zinc-500">{formatDateTime(notification.createdAt)}</p>
+                {notification.id && (
+                  <button
+                    type="button"
+                    disabled={pendingNotificationId === notification.id}
+                    onClick={() => void updateNotificationReadState(notification.id as string, !notification.isRead)}
+                    className="mt-2 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {notification.isRead ? "Mark unread" : "Mark read"}
+                  </button>
+                )}
               </div>
             ))}
           </div>

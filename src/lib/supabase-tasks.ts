@@ -9,6 +9,8 @@ type TaskMetadata = {
   dueDate?: unknown;
   priority?: unknown;
   status?: unknown;
+  completedAt?: unknown;
+  reopenedAt?: unknown;
 };
 
 type SupabaseTaskAuditRow = {
@@ -40,6 +42,23 @@ function getShipmentReference(row: SupabaseTaskAuditRow) {
   return shipment?.shipment_reference ?? "Shipment";
 }
 
+function mapTaskAssignment(row: SupabaseTaskAuditRow): TaskAssignment {
+  const metadata = row.metadata ?? {};
+
+  return {
+    id: row.id,
+    shipmentId: row.shipment_id ?? "",
+    shipmentReference: getShipmentReference(row),
+    task: cleanString(metadata.task) || "Review shipment task.",
+    assignedTo: cleanString(metadata.assignedTo) || "Unassigned",
+    assignedBy: cleanString(metadata.assignedBy) || row.actor_name || "Admin",
+    dueDate: cleanString(metadata.dueDate) || undefined,
+    priority: cleanPriority(metadata.priority),
+    status: cleanString(metadata.status) === "done" ? "done" : "open",
+    createdAt: row.created_at,
+  };
+}
+
 export async function getSupabaseTaskAssignments({ shipmentId }: { shipmentId?: string } = {}) {
   const supabase = createSupabaseServerClient();
 
@@ -65,20 +84,58 @@ export async function getSupabaseTaskAssignments({ shipmentId }: { shipmentId?: 
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as unknown as SupabaseTaskAuditRow[]).map((row): TaskAssignment => {
-    const metadata = row.metadata ?? {};
+  return ((data ?? []) as unknown as SupabaseTaskAuditRow[]).map(mapTaskAssignment);
+}
 
-    return {
-      id: row.id,
-      shipmentId: row.shipment_id ?? "",
-      shipmentReference: getShipmentReference(row),
-      task: cleanString(metadata.task) || "Review shipment task.",
-      assignedTo: cleanString(metadata.assignedTo) || "Unassigned",
-      assignedBy: cleanString(metadata.assignedBy) || row.actor_name || "Admin",
-      dueDate: cleanString(metadata.dueDate) || undefined,
-      priority: cleanPriority(metadata.priority),
-      status: cleanString(metadata.status) === "done" ? "done" : "open",
-      createdAt: row.created_at,
-    };
-  });
+export async function updateSupabaseTaskStatus({
+  taskId,
+  status,
+}: {
+  taskId: string;
+  status: TaskAssignment["status"];
+}) {
+  const supabase = createSupabaseServerClient();
+
+  if (!supabase) {
+    return null;
+  }
+
+  const { data: existingTask, error: lookupError } = await supabase
+    .from("audit_logs")
+    .select("id, metadata")
+    .eq("company_id", DEMO_COMPANY_ID)
+    .eq("action", "task_assigned")
+    .eq("id", taskId)
+    .maybeSingle();
+
+  if (lookupError) {
+    throw new Error(lookupError.message);
+  }
+
+  if (!existingTask) {
+    return null;
+  }
+
+  const metadata = (existingTask.metadata ?? {}) as TaskMetadata;
+  const nextMetadata = {
+    ...metadata,
+    status,
+    completedAt: status === "done" ? new Date().toISOString() : null,
+    reopenedAt: status === "open" ? new Date().toISOString() : metadata.reopenedAt ?? null,
+  };
+
+  const { data, error } = await supabase
+    .from("audit_logs")
+    .update({ metadata: nextMetadata })
+    .eq("company_id", DEMO_COMPANY_ID)
+    .eq("action", "task_assigned")
+    .eq("id", taskId)
+    .select("id, shipment_id, actor_name, metadata, created_at, shipments(shipment_reference)")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return mapTaskAssignment(data as unknown as SupabaseTaskAuditRow);
 }

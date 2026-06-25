@@ -15,6 +15,7 @@ export function ShipmentTaskCard({ shipment }: Readonly<{ shipment: Shipment }>)
   const [tasks, setTasks] = useState<TaskAssignment[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     let isActive = true;
@@ -82,6 +83,34 @@ export function ShipmentTaskCard({ shipment }: Readonly<{ shipment: Shipment }>)
     }
   }
 
+  async function updateTaskStatus(taskId: string, status: TaskAssignment["status"]) {
+    setMessage(null);
+    setError(null);
+    setPendingTaskId(taskId);
+
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const result = (await response.json()) as { task?: TaskAssignment; error?: string };
+
+      if (!response.ok || !result.task) {
+        throw new Error(result.error ?? "Unable to update task.");
+      }
+
+      setTasks((current) => current.map((task) => (task.id === taskId ? result.task as TaskAssignment : task)));
+      setMessage(status === "done" ? "Task marked done." : "Task reopened.");
+      window.dispatchEvent(new Event("harborbridge:shipments-changed"));
+      router.refresh();
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Unable to update task.");
+    } finally {
+      setPendingTaskId(null);
+    }
+  }
+
   return (
     <Card>
       <div className="flex items-start gap-3">
@@ -132,6 +161,14 @@ export function ShipmentTaskCard({ shipment }: Readonly<{ shipment: Shipment }>)
                 Assigned by {task.assignedBy}
                 {task.dueDate ? ` - due ${task.dueDate}` : ""} - {formatDateTime(task.createdAt)}
               </p>
+              <button
+                type="button"
+                disabled={pendingTaskId === task.id}
+                onClick={() => void updateTaskStatus(task.id, task.status === "done" ? "open" : "done")}
+                className="mt-3 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {task.status === "done" ? "Reopen" : "Mark done"}
+              </button>
             </div>
           ))}
         </div>
