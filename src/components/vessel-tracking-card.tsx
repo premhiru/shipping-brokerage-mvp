@@ -49,18 +49,16 @@ export function VesselTrackingCard({ shipment }: { shipment: Shipment }) {
   }, [hasPosition, tracking?.latitude, tracking?.longitude]);
 
   async function callTrackingApi(method: "PATCH" | "POST") {
+    const body = JSON.stringify({
+      vesselName,
+      voyageNumber,
+      imo,
+      mmsi,
+    });
     const response = await fetch(`/api/shipments/${shipment.id}/vessel-tracking`, {
       method,
-      headers: method === "PATCH" ? { "Content-Type": "application/json" } : undefined,
-      body:
-        method === "PATCH"
-          ? JSON.stringify({
-              vesselName,
-              voyageNumber,
-              imo,
-              mmsi,
-            })
-          : undefined,
+      headers: { "Content-Type": "application/json" },
+      body,
     });
     const payload = (await response.json()) as ApiPayload;
 
@@ -207,7 +205,7 @@ export function VesselTrackingCard({ shipment }: { shipment: Shipment }) {
         ) : (
           <EmptyState
             title="No AIS position yet"
-            description="Add the vessel MMSI, save it, then refresh AIS to show the latest known position."
+            description="Add the vessel MMSI, then refresh AIS to save it and show the latest known position."
           />
         )}
       </div>
