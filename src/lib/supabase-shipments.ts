@@ -235,9 +235,42 @@ function mapShareLink(row: SupabaseShareLinkRow): ShareLink {
   };
 }
 
+function deriveDocumentStatus(rowStatus: SupabaseShipmentRow["document_status"], documents: ShipmentDocument[]): DocumentStatus {
+  if (documents.some((document) => document.status === "needs_review" || document.status === "rejected")) {
+    return "needs_review";
+  }
+
+  if (documents.some((document) => document.status === "accepted_by_line")) {
+    return "accepted_by_line";
+  }
+
+  if (documents.some((document) => document.status === "shared_with_line")) {
+    return "shared_with_line";
+  }
+
+  if (documents.some((document) => document.status === "processing")) {
+    return "processing";
+  }
+
+  if (documents.some((document) => document.status === "uploaded")) {
+    return "uploaded";
+  }
+
+  if (documents.some((document) => document.status === "approved")) {
+    return "approved";
+  }
+
+  if (documents.length === 0 && (rowStatus === "needs_review" || rowStatus === "rejected")) {
+    return "not_uploaded";
+  }
+
+  return rowStatus;
+}
+
 export function mapSupabaseShipment(row: SupabaseShipmentRow): Shipment {
   const cargoItems = (row.cargo_items ?? []).map(mapCargo);
   const firstCargo = cargoItems[0];
+  const documents = (row.documents ?? []).map(mapDocument);
 
   return {
     id: row.id,
@@ -266,13 +299,13 @@ export function mapSupabaseShipment(row: SupabaseShipmentRow): Shipment {
     blNumber: row.bl_number ?? undefined,
     containerNumber: row.container_number ?? undefined,
     status: row.status,
-    documentStatus: row.document_status,
+    documentStatus: deriveDocumentStatus(row.document_status, documents),
     blStatus: row.bl_status,
     nextAction: row.next_action ?? "Review shipment details and documents.",
     notes: row.notes ?? "",
     lastUpdated: row.updated_at ?? row.created_at,
     cargoItems,
-    documents: (row.documents ?? []).map(mapDocument),
+    documents,
     timeline: (row.shipment_events ?? []).map(mapEvent),
     comments: (row.comments ?? []).map(mapComment),
     auditLogs: (row.audit_logs ?? []).map(mapAuditLog),

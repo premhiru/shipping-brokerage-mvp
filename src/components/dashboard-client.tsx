@@ -55,15 +55,15 @@ export function DashboardClient() {
     };
   }, []);
 
-  const blocked = allShipments.filter(
-    (shipment) => shipment.documentStatus === "needs_review" || shipment.status === "delayed",
-  );
-  const documentBlockers = blocked.filter((shipment) => shipment.documentStatus === "needs_review");
+  const hasDocumentBlocker = (shipment: Shipment) =>
+    shipment.documents.some((document) => document.status === "needs_review" || document.status === "rejected");
+  const blocked = allShipments.filter((shipment) => hasDocumentBlocker(shipment) || shipment.status === "delayed");
+  const documentBlockers = blocked.filter(hasDocumentBlocker);
   const active = allShipments.filter((shipment) => !["closed", "delivered"].includes(shipment.status));
   const shared = allShipments.filter((shipment) => shipment.shareLinks.length > 0);
   const persistedCreated = allShipments.find((shipment) => shipment.reference >= "HB-2026-0005");
   const attentionQueue = blocked.map((shipment) => {
-    const needsDocumentReview = shipment.documentStatus === "needs_review";
+    const needsDocumentReview = hasDocumentBlocker(shipment);
     const isDelayed = shipment.status === "delayed";
 
     return {
@@ -128,7 +128,7 @@ export function DashboardClient() {
               <p className="text-sm text-zinc-600">Clear these items by reviewing documents or updating delayed shipments.</p>
             </div>
           </div>
-          <ButtonLink href="/admin" variant="secondary">Open admin review</ButtonLink>
+          {documentBlockers.length > 0 && <ButtonLink href="/admin" variant="secondary">Open admin review</ButtonLink>}
         </div>
         <div className="mt-5 space-y-3">
           {attentionQueue.length === 0 && (
@@ -162,7 +162,7 @@ export function DashboardClient() {
                   >
                     Open shipment
                   </Link>
-                  {shipment.documentStatus === "needs_review" && (
+                  {hasDocumentBlocker(shipment) && (
                     <Link
                       href={`/shipments/${shipment.id}/documents`}
                       className="inline-flex items-center justify-center rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-50"
