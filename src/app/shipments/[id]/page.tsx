@@ -5,6 +5,7 @@ import {
   CargoPanel,
   CommentsPanel,
   DocumentsPanel,
+  DocumentReviewSummary,
   SharingPanel,
   ShipmentOverview,
   ShipmentSummary,
@@ -39,6 +40,7 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
       <ShipmentOverview shipment={shipment} />
       <CargoPanel shipment={shipment} />
       <DocumentsPanel shipment={shipment} />
+      <DocumentReviewSummary shipment={shipment} />
       <TimelinePanel shipment={shipment} />
       <BillOfLadingPanel shipment={shipment} />
       <CommentsPanel shipment={shipment} />

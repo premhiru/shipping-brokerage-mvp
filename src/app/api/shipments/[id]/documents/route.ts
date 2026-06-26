@@ -1,6 +1,8 @@
 import { documentLabelToValue, documentTypeValues } from "@/lib/document-types";
+import { buildDocumentReview, mergeReviewNote, reviewStatusForDocument } from "@/lib/document-review";
 import { createSupabaseServerClient, jsonError } from "@/lib/supabase-server";
 import { DEMO_COMPANY_ID } from "@/lib/storage";
+import type { AutofillConfidence, AutofillSuggestion } from "@/lib/document-autofill";
 import type { DocumentStatus } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -25,6 +27,23 @@ function cleanNumber(value: unknown) {
 function cleanDocumentType(value: string) {
   const normalized = documentTypeValues.includes(value) ? value : documentLabelToValue(value);
   return documentTypeValues.includes(normalized) ? normalized : "other";
+}
+
+function cleanSuggestions(value: unknown): AutofillSuggestion[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+    .map((item): AutofillSuggestion => ({
+      field: cleanString(item.field) as AutofillSuggestion["field"],
+      label: cleanString(item.label),
+      value: cleanString(item.value),
+      sourceFileName: cleanString(item.sourceFileName),
+      confidence: (item.confidence === "high" ? "high" : "medium") satisfies AutofillConfidence,
+    }))
+    .filter((item) => item.field && item.label && item.value);
 }
 
 function documentStatusForShipment(status: DocumentStatus) {
@@ -73,7 +92,31 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const { data: shipment, error: shipmentError } = await supabase
       .from("shipments")
-      .select("id, shipment_reference")
+      .select(`
+        id,
+        shipment_reference,
+        shipper_name,
+        consignee_name,
+        notify_party,
+        cargo_description,
+        item_type,
+        hs_code,
+        package_count,
+        gross_weight_kg,
+        net_weight_kg,
+        incoterm,
+        origin,
+        destination,
+        pol,
+        pod,
+        container_type,
+        preferred_etd,
+        preferred_eta,
+        carrier,
+        booking_number,
+        bl_number,
+        container_number
+      `)
       .eq("company_id", DEMO_COMPANY_ID)
       .eq("id", id)
       .maybeSingle();
@@ -86,6 +129,36 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return jsonError("Shipment was not found.", 404);
     }
 
+    const suggestions = cleanSuggestions(input.extractedFields);
+    const review = buildDocumentReview({
+      documentType,
+      suggestions,
+      shipment: {
+        shipperName: cleanString(shipment.shipper_name),
+        consigneeName: cleanString(shipment.consignee_name),
+        notifyParty: cleanString(shipment.notify_party),
+        cargoDescription: cleanString(shipment.cargo_description),
+        itemType: cleanString(shipment.item_type),
+        hsCode: cleanString(shipment.hs_code),
+        packageCount: Number(shipment.package_count ?? 0),
+        grossWeightKg: Number(shipment.gross_weight_kg ?? 0),
+        netWeightKg: Number(shipment.net_weight_kg ?? 0),
+        incoterm: cleanString(shipment.incoterm),
+        origin: cleanString(shipment.origin),
+        destination: cleanString(shipment.destination),
+        pol: cleanString(shipment.pol),
+        pod: cleanString(shipment.pod),
+        containerType: cleanString(shipment.container_type),
+        etd: cleanString(shipment.preferred_etd),
+        eta: cleanString(shipment.preferred_eta),
+        carrier: cleanString(shipment.carrier),
+        bookingNumber: cleanString(shipment.booking_number),
+        blNumber: cleanString(shipment.bl_number),
+        containerNumber: cleanString(shipment.container_number),
+      },
+    });
+    const finalStatus = reviewStatusForDocument(status, review.findings);
+    const reviewNote = mergeReviewNote(notes, review.summary);
     const uploadedAt = new Date().toISOString();
     const { data: document, error: documentError } = await supabase
       .from("documents")
@@ -99,8 +172,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         file_size_bytes: size,
         uploaded_by_name: uploadedBy,
         uploaded_at: uploadedAt,
-        status,
-        rejection_reason: notes || null,
+        status: finalStatus,
+        rejection_reason: reviewNote,
+        extracted_fields: review.extractedFields,
+        review_findings: review.findings,
+        review_summary: review.summary,
       })
       .select("id")
       .single();
@@ -109,10 +185,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       throw new Error(documentError.message);
     }
 
-    const shipmentDocumentStatus = documentStatusForShipment(status);
+    const shipmentDocumentStatus = documentStatusForShipment(finalStatus);
     const nextAction =
-      status === "needs_review"
-        ? "Review newly uploaded document."
+      finalStatus === "needs_review"
+        ? "Review document mismatch findings."
         : "Continue shipment workflow after document upload.";
 
     const { error: updateShipmentError } = await supabase
@@ -135,7 +211,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       status: "completed",
       event_timestamp: uploadedAt,
       responsible_party: uploadedBy,
-      notes: `${fileName} uploaded to shipment documents.`,
+      notes:
+        review.findings.length > 0
+          ? `${fileName} uploaded with ${review.findings.length} mismatch finding${review.findings.length === 1 ? "" : "s"}.`
+          : `${fileName} uploaded to shipment documents.`,
       source: "manual",
     });
 
@@ -154,8 +233,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         documentId: document.id,
         documentType,
         fileName,
-        status,
+        status: finalStatus,
         storagePath,
+        reviewSummary: review.summary,
+        reviewFindings: review.findings,
       },
     });
 
@@ -167,7 +248,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       document: {
         id: document.id,
         fileName,
-        status,
+        status: finalStatus,
+        reviewSummary: review.summary,
+        reviewFindings: review.findings,
       },
     });
   } catch (error) {

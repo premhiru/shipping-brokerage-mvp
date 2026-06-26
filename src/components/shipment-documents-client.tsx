@@ -6,6 +6,7 @@ import { DocumentsPanel } from "@/components/shipment-detail";
 import { StorageUploadField } from "@/components/storage-upload-field";
 import { Card, PageHeader, SelectField, TextArea, TextInput } from "@/components/ui";
 import { documentTypes } from "@/lib/demo-data";
+import type { AutofillSuggestion } from "@/lib/document-autofill";
 import type { StorageUploadResult } from "@/lib/storage";
 import type { Shipment } from "@/lib/types";
 
@@ -16,6 +17,30 @@ export function ShipmentDocumentsClient({ shipment }: { shipment: Shipment }) {
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [message, setMessage] = useState("");
 
+  async function extractDocumentFields(file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch("/api/documents/extract", {
+      method: "POST",
+      body: formData,
+    });
+    const payload = (await response.json()) as {
+      suggestions?: AutofillSuggestion[];
+      message?: string;
+      error?: string;
+    };
+
+    if (!response.ok) {
+      throw new Error(payload.error || "Unable to scan this document.");
+    }
+
+    return {
+      suggestions: payload.suggestions ?? [],
+      message: payload.message ?? "Document scan completed.",
+    };
+  }
+
   async function saveUploadedDocument(result: StorageUploadResult, file: File) {
     if (!formRef.current) {
       return;
@@ -25,9 +50,20 @@ export function ShipmentDocumentsClient({ shipment }: { shipment: Shipment }) {
     const read = (name: string) => String(formData.get(name) ?? "").trim();
 
     setState("saving");
-    setMessage(`Saving ${file.name} to shipment records...`);
+    setMessage(`Scanning ${file.name} and saving it to shipment records...`);
 
     try {
+      let extractedFields: AutofillSuggestion[] = [];
+      let extractionMessage = "";
+
+      try {
+        const extraction = await extractDocumentFields(file);
+        extractedFields = extraction.suggestions;
+        extractionMessage = extraction.message;
+      } catch (error) {
+        extractionMessage = error instanceof Error ? error.message : "Document scan was skipped.";
+      }
+
       const response = await fetch(`/api/shipments/${shipment.id}/documents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -42,9 +78,17 @@ export function ShipmentDocumentsClient({ shipment }: { shipment: Shipment }) {
             mimeType: file.type || "application/octet-stream",
             size: file.size,
           },
+          extractedFields,
         }),
       });
-      const payload = (await response.json()) as { error?: string };
+      const payload = (await response.json()) as {
+        document?: {
+          status: string;
+          reviewSummary?: string;
+          reviewFindings?: unknown[];
+        };
+        error?: string;
+      };
 
       if (!response.ok) {
         throw new Error(payload.error || "Unable to save document metadata.");
@@ -53,7 +97,11 @@ export function ShipmentDocumentsClient({ shipment }: { shipment: Shipment }) {
       formRef.current.reset();
       setDocumentId(`document-${Date.now()}`);
       setState("saved");
-      setMessage(`${file.name} uploaded and saved to Supabase.`);
+      setMessage(
+        payload.document?.reviewFindings?.length
+          ? `${file.name} uploaded. ${payload.document.reviewSummary}`
+          : `${file.name} uploaded and saved to Supabase. ${extractionMessage}`,
+      );
       router.refresh();
     } catch (error) {
       setState("error");

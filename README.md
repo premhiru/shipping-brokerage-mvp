@@ -102,15 +102,17 @@ Carrier demo links:
 3. Add the Supabase environment variables in Vercel Project Settings.
 4. Deploy.
 5. Confirm these smoke tests:
-   - Dashboard loads.
-   - Creating a shipment writes to Supabase and appears on the dashboard and shipment board.
-   - Shipment detail tabs render.
-   - Guest share link only shows one shipment.
-   - Feedback page renders.
+- Dashboard loads.
+- Creating a shipment writes to Supabase and appears on the dashboard and shipment board.
+- Shipment detail tabs render.
+- Document review shows required-document gaps and extracted-field mismatch findings.
+- Guest share link only shows one shipment.
+- Feedback page renders.
 
 ## MVP Limitations
 
 - Shipment creation, shipment reads, document uploads, feedback, comments, timeline updates, share-link generation, carrier share updates, and admin document review are backed by Supabase through app server routes.
+- Uploaded PDFs, spreadsheets, and text documents can seed structured fields and create document mismatch findings for admin review.
 - Auth is still a staged demo flow for the next backend pass.
 - Email notifications are deferred; in-app notification UI is included.
 
@@ -119,7 +121,6 @@ Carrier demo links:
 - Supabase-backed CRUD actions.
 - Protected file uploads and signed download URLs.
 - OCR document extraction.
-- AI document mismatch detection.
 - DCSA Track & Trace API for carrier/container milestones.
 - Additional carrier integrations.
 - Email parsing.

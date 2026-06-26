@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DocumentFindingPreview, DocumentReviewSummary } from "@/components/document-review-summary";
 import { DocumentFileActions } from "@/components/document-file-actions";
 import { ShipmentStatusCard } from "@/components/shipment-status-card";
 import { Badge, Card, EmptyState, Field } from "@/components/ui";
@@ -11,6 +12,7 @@ export const shipmentTabs = [
   ["Overview", ""],
   ["Cargo Details", "#cargo"],
   ["Documents", "#documents"],
+  ["Review", "#document-review"],
   ["Timeline", "#timeline"],
   ["B/L", "#bl"],
   ["Comments", "#comments"],
@@ -132,6 +134,7 @@ export function DocumentsPanel({ shipment }: { shipment: Shipment }) {
               <th className="border-b border-zinc-200 py-2">Actions</th>
               <th className="border-b border-zinc-200 py-2">Uploaded by</th>
               <th className="border-b border-zinc-200 py-2">Status</th>
+              <th className="border-b border-zinc-200 py-2">Automated review</th>
               <th className="border-b border-zinc-200 py-2">Review note</th>
             </tr>
           </thead>
@@ -152,6 +155,9 @@ export function DocumentsPanel({ shipment }: { shipment: Shipment }) {
                 <td className="py-3">
                   <Badge value={document.status} />
                 </td>
+                <td className="max-w-[360px] py-3">
+                  <DocumentFindingPreview document={document} />
+                </td>
                 <td className="py-3 text-zinc-600">{document.rejectionReason || "No issues"}</td>
               </tr>
             ))}
@@ -164,6 +170,8 @@ export function DocumentsPanel({ shipment }: { shipment: Shipment }) {
     </Card>
   );
 }
+
+export { DocumentReviewSummary };
 
 export function TimelinePanel({ shipment }: { shipment: Shipment }) {
   const completed = new Set(shipment.timeline.map((event) => event.milestone));

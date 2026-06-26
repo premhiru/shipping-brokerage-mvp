@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Activity, FileWarning, MessageSquareText, Users } from "lucide-react";
+import { DocumentFindingPreview } from "@/components/document-review-summary";
 import { DocumentFileActions } from "@/components/document-file-actions";
 import { ShipmentTable } from "@/components/shipment-table";
 import { Badge, Card, PageHeader, StatCard } from "@/components/ui";
@@ -21,7 +22,7 @@ export function AdminClient({ shipments, feedback }: { shipments: Shipment[]; fe
 
   const documentsNeedingReview: ReviewItem[] = shipments.flatMap((shipment) =>
     shipment.documents
-      .filter((document) => ["needs_review", "rejected"].includes(document.status))
+      .filter((document) => ["needs_review", "rejected"].includes(document.status) || (document.reviewFindings?.length ?? 0) > 0)
       .map((document) => ({ shipment, document })),
   );
   const auditLogs = shipments.flatMap((shipment) =>
@@ -113,6 +114,9 @@ export function AdminClient({ shipments, feedback }: { shipments: Shipment[]; fe
                   <Badge value={document.status} />
                 </div>
                 <p className="mt-1 text-sm text-zinc-600">{shipment.reference} · {document.rejectionReason || "Needs admin review"}</p>
+                <div className="mt-3">
+                  <DocumentFindingPreview document={document} />
+                </div>
                 <div className="mt-3">
                   <DocumentFileActions
                     shipmentId={shipment.id}

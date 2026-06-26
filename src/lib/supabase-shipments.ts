@@ -6,6 +6,7 @@ import type {
   AuditLog,
   BillOfLading,
   CargoItem,
+  DocumentReviewFinding,
   Comment,
   DocumentStatus,
   MilestoneStatus,
@@ -81,6 +82,9 @@ type SupabaseDocumentRow = {
   uploaded_at: string | null;
   status: DocumentStatus;
   rejection_reason: string | null;
+  extracted_fields: Record<string, unknown> | null;
+  review_findings: unknown[] | null;
+  review_summary: string | null;
 };
 
 type SupabaseEventRow = {
@@ -176,7 +180,49 @@ function mapDocument(row: SupabaseDocumentRow): ShipmentDocument {
     uploadedAt: row.uploaded_at ?? "",
     status: row.status,
     rejectionReason: row.rejection_reason ?? undefined,
+    extractedFields: normalizeExtractedFields(row.extracted_fields),
+    reviewFindings: normalizeReviewFindings(row.review_findings),
+    reviewSummary: row.review_summary ?? undefined,
   };
+}
+
+function normalizeExtractedFields(value: Record<string, unknown> | null | undefined) {
+  if (!value) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([key, fieldValue]) => [key, typeof fieldValue === "string" ? fieldValue : String(fieldValue ?? "")])
+      .filter(([, fieldValue]) => fieldValue),
+  );
+}
+
+function normalizeReviewFindings(value: unknown[] | null | undefined): DocumentReviewFinding[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((finding): finding is Record<string, unknown> => Boolean(finding) && typeof finding === "object")
+    .map((finding): DocumentReviewFinding => {
+      const severity: DocumentReviewFinding["severity"] =
+        finding.severity === "critical" || finding.severity === "warning" || finding.severity === "info"
+          ? finding.severity
+          : "warning";
+
+      return {
+        field: typeof finding.field === "string" ? finding.field : "document",
+        label: typeof finding.label === "string" ? finding.label : "Document field",
+        severity,
+        documentValue: typeof finding.documentValue === "string" ? finding.documentValue : undefined,
+        shipmentValue: typeof finding.shipmentValue === "string" ? finding.shipmentValue : undefined,
+        message:
+          typeof finding.message === "string"
+            ? finding.message
+            : "Document needs manual review.",
+      };
+    });
 }
 
 function mapEvent(row: SupabaseEventRow): ShipmentEvent {

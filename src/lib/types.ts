@@ -49,6 +49,20 @@ export type ShipmentDocument = {
   uploadedAt: string;
   status: DocumentStatus;
   rejectionReason?: string;
+  extractedFields?: Record<string, string>;
+  reviewFindings?: DocumentReviewFinding[];
+  reviewSummary?: string;
+};
+
+export type DocumentReviewSeverity = "info" | "warning" | "critical";
+
+export type DocumentReviewFinding = {
+  field: string;
+  label: string;
+  severity: DocumentReviewSeverity;
+  documentValue?: string;
+  shipmentValue?: string;
+  message: string;
 };
 
 export type ShipmentEvent = {

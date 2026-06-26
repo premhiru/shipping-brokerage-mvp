@@ -37,6 +37,7 @@ export function CreateShipmentForm() {
   const [autofillSuggestions, setAutofillSuggestions] = useState<AutofillSuggestion[]>([]);
   const [selectedAutofillFields, setSelectedAutofillFields] = useState<Partial<Record<AutofillField, boolean>>>({});
   const [appliedAutofillFields, setAppliedAutofillFields] = useState<AutofillField[]>([]);
+  const [documentExtractedFields, setDocumentExtractedFields] = useState<Record<string, AutofillSuggestion[]>>({});
   const [length, setLength] = useState("120");
   const [width, setWidth] = useState("100");
   const [height, setHeight] = useState("140");
@@ -157,9 +158,11 @@ export function CreateShipmentForm() {
       }
 
       setAutofillMessage(`${file.name}: ${payload.message || "Scan completed."}`);
+      return suggestions;
     } catch (error) {
       setAutofillState("error");
       setAutofillMessage(error instanceof Error ? error.message : "Unable to scan this document.");
+      return [];
     }
   }
 
@@ -178,7 +181,11 @@ export function CreateShipmentForm() {
       },
     }));
 
-    await extractAutofillSuggestions(file);
+    const suggestions = await extractAutofillSuggestions(file);
+    setDocumentExtractedFields((fields) => ({
+      ...fields,
+      [rowId]: suggestions,
+    }));
   }
 
   function setFormElementValue(name: string, value: string) {
@@ -249,6 +256,7 @@ export function CreateShipmentForm() {
       uploadedBy: read(`uploadedBy:${rowId}`) || "Demo Admin",
       notes: read(`documentNotes:${rowId}`),
       upload: documentUploads[rowId],
+      extractedFields: documentExtractedFields[rowId] ?? [],
     }));
     const appliedAutofillSources = Array.from(
       new Set(
@@ -331,6 +339,11 @@ export function CreateShipmentForm() {
       const nextUploads = { ...uploads };
       delete nextUploads[rowId];
       return nextUploads;
+    });
+    setDocumentExtractedFields((fields) => {
+      const nextFields = { ...fields };
+      delete nextFields[rowId];
+      return nextFields;
     });
 
     if (removedFileName) {

@@ -36,13 +36,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     const status = decision === "approve" ? "approved" : "rejected";
+    const documentUpdate =
+      decision === "approve"
+        ? {
+            status,
+            rejection_reason: null,
+            review_findings: [],
+            review_summary: "Reviewed and approved by admin.",
+          }
+        : {
+            status,
+            rejection_reason: rejectionReason || "Rejected by admin.",
+          };
 
     const { error: updateError } = await supabase
       .from("documents")
-      .update({
-        status,
-        rejection_reason: decision === "reject" ? rejectionReason || "Rejected by admin." : null,
-      })
+      .update(documentUpdate)
       .eq("company_id", DEMO_COMPANY_ID)
       .eq("id", id);
 

@@ -1,8 +1,10 @@
 import { createHash } from "crypto";
+import { buildDocumentReview, mergeReviewNote, reviewStatusForDocument } from "@/lib/document-review";
 import { resolveAvailableShipmentReference, nextShipmentReference } from "@/lib/shipment-reference";
 import { getSupabaseShipments } from "@/lib/supabase-shipments";
 import { createSupabaseServerClient, jsonError } from "@/lib/supabase-server";
 import { DEMO_COMPANY_ID } from "@/lib/storage";
+import type { AutofillConfidence, AutofillSuggestion } from "@/lib/document-autofill";
 import type { DocumentStatus, ShipmentStatus } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -19,6 +21,7 @@ type UploadedDocumentPayload = {
     mimeType: string;
     size: number;
   };
+  extractedFields?: AutofillSuggestion[];
 };
 
 type AutofillPayload = {
@@ -80,6 +83,23 @@ function cleanStringArray(value: unknown) {
   }
 
   return value.map(cleanString).filter(Boolean);
+}
+
+function cleanSuggestions(value: unknown): AutofillSuggestion[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+    .map((item): AutofillSuggestion => ({
+      field: cleanString(item.field) as AutofillSuggestion["field"],
+      label: cleanString(item.label),
+      value: cleanString(item.value),
+      sourceFileName: cleanString(item.sourceFileName),
+      confidence: (item.confidence === "high" ? "high" : "medium") satisfies AutofillConfidence,
+    }))
+    .filter((item) => item.field && item.label && item.value);
 }
 
 async function resolveUniqueReference(baseReference: string) {
@@ -144,7 +164,10 @@ function parsePayload(raw: unknown): CreateShipmentPayload {
     containerNumber: cleanString(input.containerNumber),
     notes: cleanString(input.notes),
     documents: Array.isArray(input.documents)
-      ? (input.documents as UploadedDocumentPayload[])
+      ? (input.documents as UploadedDocumentPayload[]).map((document) => ({
+          ...document,
+          extractedFields: cleanSuggestions((document as Record<string, unknown>).extractedFields),
+        }))
       : [],
     autofill: {
       appliedFields: cleanStringArray(rawAutofill.appliedFields),
@@ -275,10 +298,45 @@ export async function POST(request: Request) {
     }
 
     const uploadedDocuments = payload.documents.filter((document) => document.upload?.path);
+    const reviewedDocuments = uploadedDocuments.map((document) => {
+      const review = buildDocumentReview({
+        documentType: document.documentType,
+        suggestions: document.extractedFields ?? [],
+        shipment: {
+          shipperName: payload.shipperName,
+          consigneeName: payload.consigneeName,
+          notifyParty: payload.notifyParty,
+          cargoDescription: payload.cargoDescription,
+          itemType: payload.itemType,
+          hsCode: payload.hsCode,
+          packageCount: payload.packageCount,
+          grossWeightKg: payload.grossWeightKg,
+          netWeightKg: payload.netWeightKg,
+          incoterm: payload.incoterm,
+          origin: payload.origin,
+          destination: payload.destination,
+          pol: payload.pol,
+          pod: payload.pod,
+          containerType: payload.containerType,
+          etd: payload.preferredEtd,
+          eta: payload.preferredEta,
+          carrier: payload.carrier,
+          bookingNumber: payload.bookingNumber,
+          blNumber: payload.blNumber,
+          containerNumber: payload.containerNumber,
+        },
+      });
 
-    if (uploadedDocuments.length > 0) {
+      return {
+        document,
+        review,
+        status: reviewStatusForDocument(document.status, review.findings),
+      };
+    });
+
+    if (reviewedDocuments.length > 0) {
       const { error: documentsError } = await supabase.from("documents").insert(
-        uploadedDocuments.map((document) => ({
+        reviewedDocuments.map(({ document, review, status: finalDocumentStatus }) => ({
           company_id: DEMO_COMPANY_ID,
           shipment_id: shipmentId,
           document_type: document.documentType,
@@ -288,13 +346,31 @@ export async function POST(request: Request) {
           file_size_bytes: document.upload?.size || null,
           uploaded_by_name: document.uploadedBy || "Demo Admin",
           uploaded_at: new Date().toISOString(),
-          status: document.status || "uploaded",
-          rejection_reason: document.notes || null,
+          status: finalDocumentStatus || "uploaded",
+          rejection_reason: mergeReviewNote(document.notes, review.summary),
+          extracted_fields: review.extractedFields,
+          review_findings: review.findings,
+          review_summary: review.summary,
         })),
       );
 
       if (documentsError) {
         throw new Error(documentsError.message);
+      }
+
+      if (reviewedDocuments.some(({ status: finalDocumentStatus }) => finalDocumentStatus === "needs_review")) {
+        const { error: reviewStatusError } = await supabase
+          .from("shipments")
+          .update({
+            document_status: "needs_review",
+            next_action: "Review document mismatch findings.",
+          })
+          .eq("company_id", DEMO_COMPANY_ID)
+          .eq("id", shipmentId);
+
+        if (reviewStatusError) {
+          throw new Error(reviewStatusError.message);
+        }
       }
     }
 
@@ -321,9 +397,13 @@ export async function POST(request: Request) {
               status: "completed",
               event_timestamp: new Date().toISOString(),
               responsible_party: "Broker",
-              notes: `${uploadedDocuments.length} initial document file${
-                uploadedDocuments.length === 1 ? "" : "s"
-              } uploaded through Supabase Storage.`,
+              notes: `${reviewedDocuments.length} initial document file${
+                reviewedDocuments.length === 1 ? "" : "s"
+              } uploaded through Supabase Storage${
+                reviewedDocuments.some(({ review }) => review.findings.length > 0)
+                  ? " with mismatch findings for review."
+                  : "."
+              }`,
               source: "manual",
             },
           ]
@@ -360,9 +440,13 @@ export async function POST(request: Request) {
       metadata: {
         reference: shipmentReference,
         source: "create_shipment_form",
-        uploadedDocumentCount: uploadedDocuments.length,
+        uploadedDocumentCount: reviewedDocuments.length,
         autofillAppliedFields: payload.autofill.appliedFields,
         autofillSourceFiles: payload.autofill.sourceFiles,
+        documentReviewFindings: reviewedDocuments.reduce(
+          (total, item) => total + item.review.findings.length,
+          0,
+        ),
       },
     });
 
