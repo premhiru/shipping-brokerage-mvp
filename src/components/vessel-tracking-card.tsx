@@ -2,7 +2,6 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { RefreshCw, Save, Ship } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { Badge, Card, EmptyState, Field, TextInput } from "@/components/ui";
 import { formatDateTime, formatNumber } from "@/lib/format";
 import type { Shipment, VesselTracking, VesselTrackingCandidate } from "@/lib/types";
@@ -32,7 +31,6 @@ function mapUrl(latitude: number, longitude: number) {
 }
 
 export function VesselTrackingCard({ shipment }: { shipment: Shipment }) {
-  const router = useRouter();
   const [tracking, setTracking] = useState<VesselTracking | undefined>(shipment.vesselTracking);
   const [vesselName, setVesselName] = useState(tracking?.vesselName ?? "");
   const [voyageNumber, setVoyageNumber] = useState(tracking?.voyageNumber ?? "");
@@ -74,7 +72,6 @@ export function VesselTrackingCard({ shipment }: { shipment: Shipment }) {
     setImo(payload.tracking.imo ?? imo);
     setMmsi(payload.tracking.mmsi ?? mmsi);
     setCandidates(payload.candidates ?? []);
-    router.refresh();
   }
 
   function saveTracking() {
