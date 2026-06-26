@@ -106,6 +106,14 @@ export type VesselTracking = {
   lastRefreshError?: string;
 };
 
+export type VesselTrackingCandidate = {
+  mmsi: string;
+  vesselName?: string;
+  latitude: number;
+  longitude: number;
+  aisTimestamp?: string;
+};
+
 export type ShareLink = {
   token: string;
   recipientCompany: string;

@@ -5,10 +5,11 @@ import { RefreshCw, Save, Ship } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Badge, Card, EmptyState, Field, TextInput } from "@/components/ui";
 import { formatDateTime, formatNumber } from "@/lib/format";
-import type { Shipment, VesselTracking } from "@/lib/types";
+import type { Shipment, VesselTracking, VesselTrackingCandidate } from "@/lib/types";
 
 type ApiPayload = {
   tracking?: VesselTracking;
+  candidates?: VesselTrackingCandidate[];
   error?: string;
 };
 
@@ -38,6 +39,7 @@ export function VesselTrackingCard({ shipment }: { shipment: Shipment }) {
   const [imo, setImo] = useState(tracking?.imo ?? "");
   const [mmsi, setMmsi] = useState(tracking?.mmsi ?? "");
   const [message, setMessage] = useState("");
+  const [candidates, setCandidates] = useState<VesselTrackingCandidate[]>([]);
   const [isPending, startTransition] = useTransition();
   const hasPosition = tracking?.latitude !== undefined && tracking.longitude !== undefined;
   const currentMapUrl = useMemo(() => {
@@ -71,6 +73,7 @@ export function VesselTrackingCard({ shipment }: { shipment: Shipment }) {
     setVoyageNumber(payload.tracking.voyageNumber ?? voyageNumber);
     setImo(payload.tracking.imo ?? imo);
     setMmsi(payload.tracking.mmsi ?? mmsi);
+    setCandidates(payload.candidates ?? []);
     router.refresh();
   }
 
@@ -197,6 +200,32 @@ export function VesselTrackingCard({ shipment }: { shipment: Shipment }) {
             <p className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
               MMSI is saved, but AISStream has not broadcast this vessel in the checked route areas yet.
             </p>
+          )}
+          {candidates.length > 0 && (
+            <div className="rounded-md border border-zinc-200 bg-zinc-50 p-4">
+              <p className="text-sm font-semibold text-slate-950">Live vessels seen during this scan</p>
+              <div className="mt-3 space-y-2">
+                {candidates.map((candidate) => (
+                  <button
+                    key={`${candidate.mmsi}-${candidate.aisTimestamp ?? ""}`}
+                    type="button"
+                    onClick={() => {
+                      setMmsi(candidate.mmsi);
+                      setVesselName(candidate.vesselName ?? "");
+                      setMessage(`Loaded ${candidate.mmsi} into the MMSI field. Refresh again to track it.`);
+                    }}
+                    className="block w-full rounded-md border border-zinc-200 bg-white p-3 text-left text-sm hover:bg-sky-50"
+                  >
+                    <span className="font-semibold text-slate-950">{candidate.vesselName || "Unnamed vessel"}</span>
+                    <span className="ml-2 text-zinc-600">MMSI {candidate.mmsi}</span>
+                    <span className="mt-1 block text-xs text-zinc-500">
+                      {coordinateText(candidate.latitude, candidate.longitude)}
+                      {candidate.aisTimestamp ? ` · ${formatDateTime(candidate.aisTimestamp)}` : ""}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </div>
 

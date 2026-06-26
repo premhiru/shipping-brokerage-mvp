@@ -90,13 +90,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
     }
 
-    const tracking = await refreshVesselTracking(id);
+    const result = await refreshVesselTracking(id);
 
-    if (!tracking) {
+    if (!result) {
       return jsonError("Shipment was not found.", 404);
     }
 
-    return Response.json({ tracking });
+    return Response.json(result);
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : "Unable to refresh vessel tracking.", 400);
   }

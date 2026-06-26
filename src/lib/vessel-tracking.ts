@@ -1,7 +1,7 @@
 import WebSocket from "ws";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { DEMO_COMPANY_ID } from "@/lib/storage";
-import type { VesselTracking, VesselTrackingStatus } from "@/lib/types";
+import type { VesselTracking, VesselTrackingCandidate, VesselTrackingStatus } from "@/lib/types";
 
 type SupabaseClient = NonNullable<ReturnType<typeof createSupabaseServerClient>>;
 
@@ -52,9 +52,12 @@ type BoundingBox = [[number, number], [number, number]];
 const AISSTREAM_URL = "wss://stream.aisstream.io/v0/stream";
 
 class NoAisPositionError extends Error {
-  constructor(message: string) {
+  candidates: VesselTrackingCandidate[];
+
+  constructor(message: string, candidates: VesselTrackingCandidate[] = []) {
     super(message);
     this.name = "NoAisPositionError";
+    this.candidates = candidates;
   }
 }
 
@@ -270,6 +273,33 @@ function readAisPosition(payload: Record<string, unknown>, requestedMmsi: string
   };
 }
 
+function readAisCandidate(payload: Record<string, unknown>): VesselTrackingCandidate | null {
+  const messageType = cleanString(payload.MessageType);
+  const metadata = (payload.MetaData ?? {}) as Record<string, unknown>;
+  const message = (payload.Message ?? {}) as Record<string, unknown>;
+  const position = (message.PositionReport ?? {}) as Record<string, unknown>;
+
+  if (messageType !== "PositionReport") {
+    return null;
+  }
+
+  const mmsi = String(metadata.MMSI ?? position.UserID ?? "");
+  const latitude = requiredNumber(position.Latitude ?? metadata.latitude);
+  const longitude = requiredNumber(position.Longitude ?? metadata.longitude);
+
+  if (!normalizeMmsi(mmsi) || latitude === null || longitude === null) {
+    return null;
+  }
+
+  return {
+    mmsi,
+    vesselName: cleanString(metadata.ShipName) || undefined,
+    latitude,
+    longitude,
+    aisTimestamp: cleanString(metadata.time_utc) || undefined,
+  };
+}
+
 function readDestination(payload: Record<string, unknown>) {
   const message = (payload.Message ?? {}) as Record<string, unknown>;
   const staticData = (message.ShipStaticData ?? {}) as Record<string, unknown>;
@@ -317,6 +347,7 @@ async function subscribeForAisSnapshot({
     const ws = new WebSocket(AISSTREAM_URL);
     let destination = "";
     let settled = false;
+    const candidates = new Map<string, VesselTrackingCandidate>();
 
     const finish = (callback: () => void) => {
       if (settled) {
@@ -330,7 +361,14 @@ async function subscribeForAisSnapshot({
     };
 
     const timeout = setTimeout(() => {
-      finish(() => reject(new NoAisPositionError(`AISStream did not broadcast MMSI ${mmsi} within ${Math.round(timeoutMs / 1000)} seconds.`)));
+      finish(() =>
+        reject(
+          new NoAisPositionError(
+            `AISStream did not broadcast MMSI ${mmsi} within ${Math.round(timeoutMs / 1000)} seconds.`,
+            Array.from(candidates.values()).slice(0, 8),
+          ),
+        ),
+      );
     }, timeoutMs);
 
     ws.on("open", () => {
@@ -347,6 +385,12 @@ async function subscribeForAisSnapshot({
     ws.on("message", (data) => {
       try {
         const payload = JSON.parse(data.toString()) as Record<string, unknown>;
+        const candidate = readAisCandidate(payload);
+
+        if (candidate && !candidates.has(candidate.mmsi)) {
+          candidates.set(candidate.mmsi, candidate);
+        }
+
         destination = readDestination(payload) || destination;
         const position = readAisPosition(payload, mmsi, destination);
 
@@ -480,7 +524,7 @@ export async function refreshVesselTracking(shipmentId: string) {
       },
     });
 
-    return tracking;
+    return { tracking, candidates: [] };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to refresh AIS position.";
 
@@ -509,7 +553,10 @@ export async function refreshVesselTracking(shipmentId: string) {
     }
 
     if (error instanceof NoAisPositionError) {
-      return mapVesselTrackingRow(data as VesselTrackingRow);
+      return {
+        tracking: mapVesselTrackingRow(data as VesselTrackingRow),
+        candidates: error.candidates,
+      };
     }
 
     throw new Error(message);
