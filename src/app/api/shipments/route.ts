@@ -473,6 +473,7 @@ export async function POST(request: Request) {
     await supabase.from("share_links").insert({
       company_id: DEMO_COMPANY_ID,
       shipment_id: shipmentId,
+      public_token: token,
       token_hash: createHash("sha256").update(token).digest("hex"),
       recipient_company: payload.carrier || "Carrier pending",
       recipient_name: "Carrier contact",

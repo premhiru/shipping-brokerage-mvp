@@ -100,6 +100,7 @@ export type BillOfLading = {
 };
 
 export type ShareLink = {
+  id?: string;
   token: string;
   recipientCompany: string;
   recipientName: string;

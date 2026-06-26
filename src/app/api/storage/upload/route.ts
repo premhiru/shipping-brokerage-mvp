@@ -64,7 +64,7 @@ async function isValidCarrierUpload({
     .select("id")
     .eq("company_id", DEMO_COMPANY_ID)
     .eq("shipment_id", shipmentId)
-    .eq("token_hash", tokenHash)
+    .or(`token_hash.eq.${tokenHash},public_token.eq.${shareToken}`)
     .eq("can_upload_documents", true)
     .is("revoked_at", null)
     .gt("expires_at", new Date().toISOString())

@@ -43,6 +43,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { error } = await supabase.from("share_links").insert({
       company_id: DEMO_COMPANY_ID,
       shipment_id: id,
+      public_token: token,
       token_hash: tokenHash,
       recipient_company: recipientCompany,
       recipient_name: recipientName,

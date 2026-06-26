@@ -49,7 +49,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       .from("share_links")
       .select("shipment_id, recipient_company, recipient_name, can_comment, can_upload_documents, can_update_status")
       .eq("company_id", DEMO_COMPANY_ID)
-      .eq("token_hash", tokenHash)
+      .or(`token_hash.eq.${tokenHash},public_token.eq.${token}`)
       .is("revoked_at", null)
       .gt("expires_at", new Date().toISOString())
       .single();
@@ -161,7 +161,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       .from("share_links")
       .update({ last_viewed_at: new Date().toISOString() })
       .eq("company_id", DEMO_COMPANY_ID)
-      .eq("token_hash", tokenHash);
+      .or(`token_hash.eq.${tokenHash},public_token.eq.${token}`);
 
     if (shareLinkUpdateError) {
       throw new Error(shareLinkUpdateError.message);

@@ -122,6 +122,8 @@ type SupabaseBillOfLadingRow = {
 };
 
 type SupabaseShareLinkRow = {
+  id: string;
+  public_token: string | null;
   token_hash: string;
   recipient_company: string | null;
   recipient_name: string | null;
@@ -150,11 +152,15 @@ function dimensionText(cargo?: SupabaseCargoRow) {
   return `${toNumber(cargo.length_cm)} x ${toNumber(cargo.width_cm)} x ${toNumber(cargo.height_cm)} cm`;
 }
 
-function shareTokenFromHash(tokenHash: string) {
+function shareTokenFromHash(tokenHash: string, fallbackToken?: string | null) {
+  if (fallbackToken) {
+    return fallbackToken;
+  }
+
   const knownTokens = ["demo-share-electronics", "demo-share-furniture"];
   return knownTokens.find(
     (token) => createHash("sha256").update(token).digest("hex") === tokenHash,
-  ) ?? tokenHash;
+  ) ?? "";
 }
 
 function mapCargo(row: SupabaseCargoRow): CargoItem {
@@ -268,8 +274,11 @@ function mapBillOfLading(row: SupabaseBillOfLadingRow): BillOfLading {
 }
 
 function mapShareLink(row: SupabaseShareLinkRow): ShareLink {
+  const token = shareTokenFromHash(row.token_hash, row.public_token);
+
   return {
-    token: shareTokenFromHash(row.token_hash),
+    id: row.id,
+    token,
     recipientCompany: row.recipient_company ?? "Carrier",
     recipientName: row.recipient_name ?? "Carrier contact",
     recipientEmail: row.recipient_email ?? "",
@@ -425,9 +434,9 @@ export async function getSupabaseShipmentByShareToken(token: string) {
 
   const { data: shareLink, error: shareError } = await supabase
     .from("share_links")
-    .select("shipment_id")
+    .select("id, shipment_id")
     .eq("company_id", DEMO_COMPANY_ID)
-    .eq("token_hash", tokenHash)
+    .or(`token_hash.eq.${tokenHash},public_token.eq.${token}`)
     .is("revoked_at", null)
     .gt("expires_at", new Date().toISOString())
     .maybeSingle();
@@ -436,6 +445,7 @@ export async function getSupabaseShipmentByShareToken(token: string) {
     throw new Error(shareError.message);
   }
 
+  const shareLinkId = shareLink?.id as string | undefined;
   const shipmentId = shareLink?.shipment_id as string | undefined;
 
   if (!shipmentId) {
@@ -451,7 +461,7 @@ export async function getSupabaseShipmentByShareToken(token: string) {
   return {
     ...shipment,
     shareLinks: shipment.shareLinks.map((shareLink) =>
-      shareLink.token === tokenHash ? { ...shareLink, token } : shareLink,
+      shareLink.id === shareLinkId ? { ...shareLink, token } : shareLink,
     ),
   };
 }
