@@ -444,18 +444,12 @@ async function fetchAisStreamSnapshot(mmsi: string, shipment: ShipmentForTrackin
   const routeBoxes = routeBoxesForShipment(shipment);
 
   if (routeBoxes.length > 0) {
-    try {
-      return await subscribeForAisSnapshot({
-        mmsi,
-        boundingBoxes: routeBoxes,
-        useMmsiFilter: false,
-        timeoutMs: 30000,
-      });
-    } catch (error) {
-      if (!(error instanceof NoAisPositionError)) {
-        throw error;
-      }
-    }
+    return subscribeForAisSnapshot({
+      mmsi,
+      boundingBoxes: routeBoxes,
+      useMmsiFilter: false,
+      timeoutMs: 30000,
+    });
   }
 
   return subscribeForAisSnapshot({
