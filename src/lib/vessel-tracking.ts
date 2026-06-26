@@ -120,6 +120,32 @@ function requiredNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function normalizeAisTimestamp(value: unknown) {
+  const raw = cleanString(value);
+
+  if (!raw) {
+    return undefined;
+  }
+
+  const goTimestamp = raw.match(
+    /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})(?:\.(\d+))?\s+([+-]\d{2})(\d{2})\s+UTC$/,
+  );
+
+  if (goTimestamp) {
+    const [, date, time, fraction = "0", offsetHour, offsetMinute] = goTimestamp;
+    const milliseconds = fraction.slice(0, 3).padEnd(3, "0");
+    const parsed = new Date(`${date}T${time}.${milliseconds}${offsetHour}:${offsetMinute}`);
+
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString();
+    }
+  }
+
+  const parsed = new Date(raw);
+
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+}
+
 function cleanStatus(value: string | null | undefined): VesselTrackingStatus {
   if (value === "configured" || value === "live" || value === "stale" || value === "no_signal" || value === "error") {
     return value;
@@ -268,7 +294,7 @@ function readAisPosition(payload: Record<string, unknown>, requestedMmsi: string
     headingDegrees: optionalNumber(position.TrueHeading as string | number | null),
     navigationalStatus: cleanString(position.NavigationalStatus) || undefined,
     destination,
-    aisTimestamp: cleanString(metadata.time_utc) || new Date().toISOString(),
+    aisTimestamp: normalizeAisTimestamp(metadata.time_utc) || new Date().toISOString(),
     rawPayload: payload,
   };
 }
@@ -296,7 +322,7 @@ function readAisCandidate(payload: Record<string, unknown>): VesselTrackingCandi
     vesselName: cleanString(metadata.ShipName) || undefined,
     latitude,
     longitude,
-    aisTimestamp: cleanString(metadata.time_utc) || undefined,
+    aisTimestamp: normalizeAisTimestamp(metadata.time_utc),
   };
 }
 
