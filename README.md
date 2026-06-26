@@ -26,13 +26,10 @@ Copy `.env.example` to `.env.local` and add Supabase credentials when available.
 ```bash
 SUPABASE_URL=
 SUPABASE_SECRET_KEY=
-AISSTREAM_API_KEY=
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
 The app uses server-side Supabase credentials for shipment creation, shipment reads, and private document storage. File upload controls call a server-side Next.js API route and require `SUPABASE_URL` plus `SUPABASE_SECRET_KEY` to write to Supabase Storage.
-
-`AISSTREAM_API_KEY` enables server-side vessel position refreshes. The key is never exposed to the browser; users save vessel identifiers on a shipment, then the app refreshes the latest AISStream position through a Next.js API route.
 
 ## Supabase Setup
 
@@ -115,7 +112,6 @@ Carrier demo links:
 
 - Shipment creation, shipment reads, document uploads, feedback, comments, timeline updates, share-link generation, carrier share updates, and admin document review are backed by Supabase through app server routes.
 - Auth is still a staged demo flow for the next backend pass.
-- Vessel identifiers can be stored per shipment and refreshed through AISStream when `AISSTREAM_API_KEY` is configured.
 - Email notifications are deferred; in-app notification UI is included.
 
 ## Roadmap
@@ -125,7 +121,7 @@ Carrier demo links:
 - OCR document extraction.
 - AI document mismatch detection.
 - DCSA Track & Trace API for carrier/container milestones.
-- Additional carrier and AIS provider integrations.
+- Additional carrier integrations.
 - Email parsing.
 - Bill of Lading automation.
 - HS code validation.

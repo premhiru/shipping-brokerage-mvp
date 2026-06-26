@@ -241,7 +241,7 @@ from (
     ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'::uuid, 'Shared with shipping line', 'completed', now() - interval '2 days', 'Broker', 'Share link sent to carrier desk.', 'manual'),
     ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'::uuid, 'Booking requested', 'in_progress', now() - interval '1 day', 'Shipping line', 'Carrier reviewing equipment availability.', 'shipping_line_guest'),
     ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3'::uuid, 'Loaded on vessel', 'completed', now() - interval '2 days', 'Shipping line', 'Reefer loaded and sailing confirmed.', 'shipping_line_guest'),
-    ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3'::uuid, 'Vessel sailed', 'completed', now() - interval '1 day', 'System', 'Manual tracker updated by operations.', 'manual'),
+    ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3'::uuid, 'Vessel sailed', 'completed', now() - interval '1 day', 'System', 'Manual timeline updated by operations.', 'manual'),
     ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4'::uuid, 'Documents reviewed', 'blocked', now() - interval '8 hours', 'Broker', 'DG documents need corrections before carrier submission.', 'manual')
 ) as seed_events(shipment_id, milestone, status, event_timestamp, responsible_party, notes, source);
 

@@ -358,7 +358,7 @@ export const shipments: Shipment[] = [
         status: "completed",
         timestamp: "2026-06-21T06:30:00+08:00",
         responsibleParty: "Operations",
-        notes: "Manual tracker updated by operations.",
+        notes: "Manual timeline updated by operations.",
         source: "manual",
       },
       {

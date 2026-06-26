@@ -15,8 +15,6 @@ import type {
   ShipmentEvent,
   ShipmentStatus,
   UserRole,
-  VesselTracking,
-  VesselTrackingStatus,
 } from "@/lib/types";
 
 type SupabaseShipmentRow = {
@@ -58,7 +56,6 @@ type SupabaseShipmentRow = {
   comments?: SupabaseCommentRow[];
   audit_logs?: SupabaseAuditRow[];
   bill_of_lading_records?: SupabaseBillOfLadingRow[];
-  vessel_tracking?: SupabaseVesselTrackingRow[];
   share_links?: SupabaseShareLinkRow[];
 };
 
@@ -118,25 +115,6 @@ type SupabaseBillOfLadingRow = {
   issued_at: string | null;
   approved_at: string | null;
   notes: string | null;
-};
-
-type SupabaseVesselTrackingRow = {
-  vessel_name: string | null;
-  voyage_number: string | null;
-  imo: string | null;
-  mmsi: string | null;
-  latitude: string | number | null;
-  longitude: string | number | null;
-  speed_knots: string | number | null;
-  course_degrees: string | number | null;
-  heading_degrees: string | number | null;
-  navigational_status: string | null;
-  destination: string | null;
-  ais_timestamp: string | null;
-  provider: string;
-  last_refresh_attempt_at: string | null;
-  last_refresh_status: VesselTrackingStatus | string;
-  last_refresh_error: string | null;
 };
 
 type SupabaseShareLinkRow = {
@@ -243,55 +221,6 @@ function mapBillOfLading(row: SupabaseBillOfLadingRow): BillOfLading {
   };
 }
 
-function optionalNumber(value: string | number | null | undefined) {
-  if (value === null || value === undefined || value === "") {
-    return undefined;
-  }
-
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function deriveVesselTrackingStatus(row: SupabaseVesselTrackingRow): VesselTrackingStatus {
-  if (row.last_refresh_status === "error" || row.last_refresh_status === "no_signal") {
-    return row.last_refresh_status;
-  }
-
-  if (!row.mmsi) {
-    return "not_configured";
-  }
-
-  if (!row.ais_timestamp) {
-    return "configured";
-  }
-
-  const ageMs = Date.now() - new Date(row.ais_timestamp).getTime();
-  const staleAfterMs = 1000 * 60 * 60 * 12;
-
-  return ageMs > staleAfterMs ? "stale" : "live";
-}
-
-function mapVesselTracking(row: SupabaseVesselTrackingRow): VesselTracking {
-  return {
-    vesselName: row.vessel_name ?? undefined,
-    voyageNumber: row.voyage_number ?? undefined,
-    imo: row.imo ?? undefined,
-    mmsi: row.mmsi ?? undefined,
-    latitude: optionalNumber(row.latitude),
-    longitude: optionalNumber(row.longitude),
-    speedKnots: optionalNumber(row.speed_knots),
-    courseDegrees: optionalNumber(row.course_degrees),
-    headingDegrees: optionalNumber(row.heading_degrees),
-    navigationalStatus: row.navigational_status ?? undefined,
-    destination: row.destination ?? undefined,
-    aisTimestamp: row.ais_timestamp ?? undefined,
-    provider: row.provider,
-    lastRefreshAttemptAt: row.last_refresh_attempt_at ?? undefined,
-    lastRefreshStatus: deriveVesselTrackingStatus(row),
-    lastRefreshError: row.last_refresh_error ?? undefined,
-  };
-}
-
 function mapShareLink(row: SupabaseShareLinkRow): ShareLink {
   return {
     token: shareTokenFromHash(row.token_hash),
@@ -383,7 +312,6 @@ export function mapSupabaseShipment(row: SupabaseShipmentRow): Shipment {
     billOfLading: row.bill_of_lading_records?.[0]
       ? mapBillOfLading(row.bill_of_lading_records[0])
       : undefined,
-    vesselTracking: row.vessel_tracking?.[0] ? mapVesselTracking(row.vessel_tracking[0]) : undefined,
     shareLinks: (row.share_links ?? []).map(mapShareLink),
   };
 }
@@ -396,7 +324,6 @@ const shipmentSelect = `
   comments(*),
   audit_logs(*),
   bill_of_lading_records(*),
-  vessel_tracking(*),
   share_links(*)
 `;
 

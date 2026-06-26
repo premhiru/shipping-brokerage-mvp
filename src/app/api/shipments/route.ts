@@ -3,7 +3,6 @@ import { resolveAvailableShipmentReference, nextShipmentReference } from "@/lib/
 import { getSupabaseShipments } from "@/lib/supabase-shipments";
 import { createSupabaseServerClient, jsonError } from "@/lib/supabase-server";
 import { DEMO_COMPANY_ID } from "@/lib/storage";
-import { normalizeImo, normalizeMmsi } from "@/lib/vessel-tracking";
 import type { DocumentStatus, ShipmentStatus } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -32,10 +31,6 @@ type CreateShipmentPayload = {
   shipmentReference: string;
   carrier: string;
   bookingNumber: string;
-  vesselName: string;
-  voyageNumber: string;
-  imo: string;
-  mmsi: string;
   shipperName: string;
   consigneeName: string;
   notifyParty: string;
@@ -124,10 +119,6 @@ function parsePayload(raw: unknown): CreateShipmentPayload {
     shipmentReference: cleanString(input.shipmentReference),
     carrier: cleanString(input.carrier),
     bookingNumber: cleanString(input.bookingNumber),
-    vesselName: cleanString(input.vesselName),
-    voyageNumber: cleanString(input.voyageNumber),
-    imo: cleanString(input.imo),
-    mmsi: cleanString(input.mmsi),
     shipperName: cleanString(input.shipperName),
     consigneeName: cleanString(input.consigneeName),
     notifyParty: cleanString(input.notifyParty),
@@ -166,14 +157,6 @@ function parsePayload(raw: unknown): CreateShipmentPayload {
   requireField(payload.cargoDescription, "Cargo description");
   requireField(payload.origin, "Origin");
   requireField(payload.destination, "Destination");
-
-  if (payload.mmsi && !normalizeMmsi(payload.mmsi)) {
-    throw new Error("MMSI must be a 9-digit vessel identifier.");
-  }
-
-  if (payload.imo && !normalizeImo(payload.imo)) {
-    throw new Error("IMO must be a 7-digit vessel identifier.");
-  }
 
   return payload;
 }
@@ -291,22 +274,6 @@ export async function POST(request: Request) {
       throw new Error(cargoError.message);
     }
 
-    if (payload.vesselName || payload.voyageNumber || payload.imo || payload.mmsi) {
-      const { error: vesselError } = await supabase.from("vessel_tracking").insert({
-        company_id: DEMO_COMPANY_ID,
-        shipment_id: shipmentId,
-        vessel_name: payload.vesselName || null,
-        voyage_number: payload.voyageNumber || null,
-        imo: normalizeImo(payload.imo) || null,
-        mmsi: normalizeMmsi(payload.mmsi) || null,
-        last_refresh_status: normalizeMmsi(payload.mmsi) ? "configured" : "not_configured",
-      });
-
-      if (vesselError) {
-        throw new Error(vesselError.message);
-      }
-    }
-
     const uploadedDocuments = payload.documents.filter((document) => document.upload?.path);
 
     if (uploadedDocuments.length > 0) {
@@ -396,7 +363,6 @@ export async function POST(request: Request) {
         uploadedDocumentCount: uploadedDocuments.length,
         autofillAppliedFields: payload.autofill.appliedFields,
         autofillSourceFiles: payload.autofill.sourceFiles,
-        vesselTrackingConfigured: Boolean(payload.mmsi),
       },
     });
 
