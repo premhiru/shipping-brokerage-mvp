@@ -373,24 +373,26 @@ async function fetchAisStreamSnapshot(mmsi: string, shipment: ShipmentForTrackin
 
   const routeBoxes = routeBoxesForShipment(shipment);
 
-  try {
-    return await subscribeForAisSnapshot({
-      mmsi,
-      boundingBoxes: [[[-90, -180], [90, 180]]],
-      useMmsiFilter: true,
-      timeoutMs: 10000,
-    });
-  } catch (error) {
-    if (!(error instanceof NoAisPositionError) || routeBoxes.length === 0) {
-      throw error;
+  if (routeBoxes.length > 0) {
+    try {
+      return await subscribeForAisSnapshot({
+        mmsi,
+        boundingBoxes: routeBoxes,
+        useMmsiFilter: false,
+        timeoutMs: 30000,
+      });
+    } catch (error) {
+      if (!(error instanceof NoAisPositionError)) {
+        throw error;
+      }
     }
   }
 
   return subscribeForAisSnapshot({
     mmsi,
-    boundingBoxes: routeBoxes,
-    useMmsiFilter: false,
-    timeoutMs: 25000,
+    boundingBoxes: [[[-90, -180], [90, 180]]],
+    useMmsiFilter: true,
+    timeoutMs: 15000,
   });
 }
 
