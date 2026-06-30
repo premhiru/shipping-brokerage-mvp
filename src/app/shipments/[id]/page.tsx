@@ -32,7 +32,12 @@ export default async function ShipmentDetailPage({ params }: { params: Promise<{
         eyebrow={shipment.reference}
         title={`${shipment.origin} to ${shipment.destination}`}
         description={shipment.cargoDescription}
-        action={<ButtonLink href={`/shipments/${shipment.id}/share`} variant="secondary">Share with line</ButtonLink>}
+        action={
+          <>
+            <ButtonLink href={`/api/shipments/${shipment.id}/pack`}>Generate shipment pack</ButtonLink>
+            <ButtonLink href={`/shipments/${shipment.id}/share`} variant="secondary">Share with line</ButtonLink>
+          </>
+        }
       />
       <ShipmentTabs shipment={shipment} />
       <ShipmentSummary shipment={shipment} />

@@ -91,6 +91,7 @@ Carrier demo links:
 - `/shipments/[id]/timeline`
 - `/shipments/[id]/comments`
 - `/shipments/[id]/share`
+- `/api/shipments/[id]/pack`
 - `/line/share/[token]`
 - `/admin`
 - `/feedback`
@@ -106,6 +107,7 @@ Carrier demo links:
 - Creating a shipment writes to Supabase and appears on the dashboard and shipment board.
 - Shipment detail tabs render.
 - Document review shows required-document gaps and extracted-field mismatch findings.
+- Shipment detail can generate a client-ready shipment pack PDF.
 - Guest share link only shows one shipment.
 - Feedback page renders.
 
@@ -113,6 +115,7 @@ Carrier demo links:
 
 - Shipment creation, shipment reads, document uploads, feedback, comments, timeline updates, share-link generation, carrier share updates, and admin document review are backed by Supabase through app server routes.
 - Uploaded PDFs, spreadsheets, and text documents can seed structured fields and create document mismatch findings for admin review.
+- Shipment details can export a client-ready PDF pack with shipment summary, document checklist, findings, uploaded document list, timeline, B/L details, and audit snapshot.
 - Auth is still a staged demo flow for the next backend pass.
 - Email notifications are deferred; in-app notification UI is included.
 
