@@ -9,10 +9,18 @@ import { notifications as seedNotifications, shipments as seedShipments } from "
 import { formatDateTime } from "@/lib/format";
 import type { Notification, Shipment, TaskAssignment } from "@/lib/types";
 
-export function DashboardClient() {
-  const [allShipments, setAllShipments] = useState<Shipment[]>(seedShipments);
-  const [dashboardNotifications, setDashboardNotifications] = useState<Notification[]>(seedNotifications);
-  const [assignedTasks, setAssignedTasks] = useState<TaskAssignment[]>([]);
+export function DashboardClient({
+  initialShipments,
+  initialNotifications,
+  initialTasks,
+}: {
+  initialShipments: Shipment[];
+  initialNotifications: Notification[];
+  initialTasks: TaskAssignment[];
+}) {
+  const [allShipments, setAllShipments] = useState<Shipment[]>(initialShipments);
+  const [dashboardNotifications, setDashboardNotifications] = useState<Notification[]>(initialNotifications);
+  const [assignedTasks, setAssignedTasks] = useState<TaskAssignment[]>(initialTasks);
   const [showCompletedTasks, setShowCompletedTasks] = useState(false);
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const [pendingNotificationId, setPendingNotificationId] = useState<string | null>(null);
@@ -196,7 +204,7 @@ export function DashboardClient() {
       )}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Active shipments" value={active.length} helper={`Across ${allShipments.length} demo records`} />
+        <StatCard label="Active shipments" value={active.length} helper={`Across ${allShipments.length} shipments`} />
         <StatCard label="Shared with lines" value={shared.length} helper="Scoped carrier portals active" />
         <a
           href="#attention-queue"
